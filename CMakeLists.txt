@@ -45,3 +45,10 @@ add_executable(smoke_test
 
 target_include_directories(smoke_test PRIVATE include)
 add_test(NAME smoke_test COMMAND smoke_test)
+
+add_executable(event_queue_test
+    tests/event_queue_test.cpp
+)
+
+target_include_directories(event_queue_test PRIVATE include)
+add_test(NAME event_queue_test COMMAND event_queue_test)

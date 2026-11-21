@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/jacksandroids/Code/atomic_dlt/glassbox-dvp-sim/build-ubsan/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

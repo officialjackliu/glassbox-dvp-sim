@@ -30,5 +30,15 @@ int main()
     while (const auto event = clock.pop_next(queue)) {
         std::cout << "t=" << event->time_us << " seq=" << event->seq.value() << '\n';
     }
+    glassbox::MeasuredNs measured_ns = 0;
+    static_cast<void>(
+        glassbox::measure_handler([]() noexcept {}, measured_ns));
+    glassbox::write_synthetic_trace(
+        std::cout,
+        glassbox::SyntheticTraceEvent{
+            .sim_time_us = clock.now_us(),
+            .measured_ns = measured_ns,
+            .kind = "SCRIPT_ACTION",
+        });
     return 0;
 }

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <functional>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <utility>
 
@@ -53,5 +54,13 @@ struct SyntheticTraceEvent {
     std::uint64_t measured_ns = 0;
     std::string kind;
 };
+
+inline void write_synthetic_trace(std::ostream& output,
+                                  const SyntheticTraceEvent& event)
+{
+    output << "{\"sim_time_us\":" << event.sim_time_us
+           << ",\"measured_ns\":" << event.measured_ns
+           << ",\"kind\":\"" << event.kind << "\"}\n";
+}
 
 } // namespace glassbox

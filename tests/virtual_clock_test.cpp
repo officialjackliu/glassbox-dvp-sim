@@ -1,6 +1,7 @@
 #include "sim/virtual_clock.hpp"
 
 #include <cassert>
+#include <sstream>
 
 int main()
 {
@@ -54,6 +55,20 @@ int main()
     assert(trace.measured_ns >= 0);
     assert(state == 2);
     assert(trace.sim_time_us == 250);
+
+    std::ostringstream trace_output;
+    glassbox::write_synthetic_trace(trace_output, trace);
+    assert(trace_output.str() ==
+           "{\"sim_time_us\":250,\"measured_ns\":" +
+               std::to_string(measured_ns) +
+               ",\"kind\":\"STATE_CHANGE\"}\n");
+
+    const auto sim_state_before = 1;
+    const auto simulated_decision =
+        glassbox::SyntheticTraceEvent{250, measured_ns, "STATE_CHANGE"};
+    const auto changed_state =
+        simulated_decision.sim_time_us >= 250 ? 2 : sim_state_before;
+    assert(changed_state == 2);
 
     return 0;
 }

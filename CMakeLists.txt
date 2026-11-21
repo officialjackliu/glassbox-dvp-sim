@@ -52,3 +52,10 @@ add_executable(event_queue_test
 
 target_include_directories(event_queue_test PRIVATE include)
 add_test(NAME event_queue_test COMMAND event_queue_test)
+
+add_executable(virtual_clock_test
+    tests/virtual_clock_test.cpp
+)
+
+target_include_directories(virtual_clock_test PRIVATE include)
+add_test(NAME virtual_clock_test COMMAND virtual_clock_test)

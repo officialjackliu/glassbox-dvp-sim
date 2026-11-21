@@ -1,5 +1,6 @@
 #include "sim/core_types.hpp"
 #include "sim/event_queue.hpp"
+#include "sim/virtual_clock.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -25,7 +26,8 @@ int main()
     std::cout << "glassbox-dvp-sim\n";
     std::cout << "trade=" << trade_id.value()
               << " cents=" << cash.value() << '\n';
-    while (const auto event = queue.pop()) {
+    glassbox::VirtualClock clock;
+    while (const auto event = clock.pop_next(queue)) {
         std::cout << "t=" << event->time_us << " seq=" << event->seq.value() << '\n';
     }
     return 0;

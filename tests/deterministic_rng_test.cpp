@@ -4,6 +4,9 @@
 #include <cassert>
 #include <cstdint>
 
+// Focused DeterministicRng test:
+// verifies identical outputs for one seed, reset behavior, jitter bounds,
+// PPM drops, and identical jitter/drop draw sequences.
 int main()
 {
     glassbox::DeterministicRng first{42};

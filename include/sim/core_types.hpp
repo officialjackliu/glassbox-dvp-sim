@@ -1,5 +1,11 @@
 #pragma once
 
+// Shared immutable domain types and checked integer operations.
+//
+// This header is the boundary for simulation IDs, virtual time, money, and
+// quantities. Import it in domain, protocol, and simulator code rather than
+// introducing floating-point or ad-hoc integer aliases.
+
 #include <concepts>
 #include <cstdint>
 #include <limits>
@@ -46,6 +52,8 @@ constexpr std::string_view to_string(NodeId node) noexcept
     return "UNKNOWN";
 }
 
+// Converts a trace/display node name back into an enum value.
+// Event, log, and trace code call this at configuration or parsing boundaries.
 constexpr std::optional<NodeId> node_id_from_string(std::string_view name) noexcept
 {
     if (name == "COORD") {
@@ -130,6 +138,7 @@ static_assert(!std::is_floating_point_v<decltype(Units{0}.value())>);
 [[nodiscard]] constexpr std::optional<std::int64_t>
 checked_add_i64(std::int64_t lhs, std::int64_t rhs) noexcept
 {
+    // Called by ledger and virtual-time calculations before state is mutated.
     if (rhs > 0 && lhs > std::numeric_limits<std::int64_t>::max() - rhs) {
         return std::nullopt;
     }

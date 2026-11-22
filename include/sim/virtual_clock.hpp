@@ -1,5 +1,11 @@
 #pragma once
 
+// Virtual simulation time and isolated wall-clock handler measurement.
+//
+// VirtualClock only advances from popped events. measure_handler separately
+// samples std::chrono::steady_clock and must never feed that value back into
+// protocol, network, or scheduling decisions.
+
 #include "sim/core_types.hpp"
 #include "sim/event_queue.hpp"
 
@@ -14,6 +20,7 @@ namespace glassbox {
 
 class VirtualClock {
   public:
+    // Read by event-loop and trace code to stamp simulation-time fields.
     [[nodiscard]] constexpr SimTimeUs now_us() const noexcept
     {
         return now_us_;
@@ -21,6 +28,8 @@ class VirtualClock {
 
     [[nodiscard]] std::optional<Event> pop_next(EventQueue& queue) noexcept
     {
+        // Called once per discrete-event loop iteration. The queue, rather than
+        // wall time, determines the next event and the value returned here.
         auto event = queue.pop();
         if (!event) {
             return std::nullopt;
@@ -38,6 +47,9 @@ class VirtualClock {
 
 using MeasuredNs = std::uint64_t;
 
+// Times a handler using std::chrono::steady_clock and writes nanoseconds to
+// measured_ns. It is for trace/diagnostic output; callers must not use the
+// result to choose network, protocol, or virtual-time behavior.
 template <typename Handler>
 [[nodiscard]] MeasuredNs measure_handler(Handler&& handler, MeasuredNs& measured_ns)
 {
@@ -55,6 +67,9 @@ struct SyntheticTraceEvent {
     std::string kind;
 };
 
+// Writes the small trace format used by the integration smoke executable.
+// Future JSONL writer code should retain sim_time_us and measured_ns as
+// separate fields and never sum or compare them as one time quantity.
 inline void write_synthetic_trace(std::ostream& output,
                                   const SyntheticTraceEvent& event)
 {

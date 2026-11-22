@@ -4,6 +4,9 @@
 #include <optional>
 #include <string>
 
+// Focused EventQueue integration test:
+// verifies empty behavior, equal-time FIFO sequence, earlier-time ordering,
+// negative-time rejection, and a small virtual-time crash/restart harness.
 int main()
 {
     glassbox::EventQueue queue;

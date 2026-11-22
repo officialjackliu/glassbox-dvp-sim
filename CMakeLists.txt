@@ -59,3 +59,10 @@ add_executable(virtual_clock_test
 
 target_include_directories(virtual_clock_test PRIVATE include)
 add_test(NAME virtual_clock_test COMMAND virtual_clock_test)
+
+add_executable(deterministic_rng_test
+    tests/deterministic_rng_test.cpp
+)
+
+target_include_directories(deterministic_rng_test PRIVATE include)
+add_test(NAME deterministic_rng_test COMMAND deterministic_rng_test)

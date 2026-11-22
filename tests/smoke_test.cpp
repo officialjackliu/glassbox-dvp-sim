@@ -1,6 +1,6 @@
 #include "sim/core_types.hpp"
+#include "check.hpp"
 
-#include <cassert>
 #include <limits>
 #include <type_traits>
 
@@ -34,13 +34,13 @@ int main()
     static_assert(units.value() == 25000);
 
     static_assert(glassbox::node_id_from_string("COORD") == glassbox::NodeId::coordinator);
-    static_assert(glassbox::node_id_from_string("GOLDMAN") == glassbox::NodeId::goldman);
-    static_assert(glassbox::node_id_from_string("JPM") == glassbox::NodeId::jpm);
-    static_assert(glassbox::node_id_from_string("CITADEL") == glassbox::NodeId::citadel);
+    static_assert(glassbox::node_id_from_string("BANK_A") == glassbox::NodeId::bank_a);
+    static_assert(glassbox::node_id_from_string("BANK_B") == glassbox::NodeId::bank_b);
+    static_assert(glassbox::node_id_from_string("BANK_C") == glassbox::NodeId::bank_c);
     static_assert(!glassbox::node_id_from_string("UNKNOWN"));
 
     static_assert(glassbox::to_string(glassbox::NodeId::coordinator) == "COORD");
-    static_assert(glassbox::to_string(glassbox::NodeId::goldman) == "GOLDMAN");
+    static_assert(glassbox::to_string(glassbox::NodeId::bank_a) == "BANK_A");
 
     constexpr auto success =
         glassbox::Outcome<glassbox::TradeId>::success(glassbox::TradeId{42});
@@ -53,7 +53,7 @@ int main()
     static_assert(!failure.value.has_value());
     static_assert(failure.reason == glassbox::ReasonCode::insufficient_funds);
 
-    assert(glassbox::checked_narrow_cast<std::int32_t>(std::int64_t{42}) == std::int32_t{42});
+    CHECK(glassbox::checked_narrow_cast<std::int32_t>(std::int64_t{42}) == std::int32_t{42});
 
     return 0;
 }

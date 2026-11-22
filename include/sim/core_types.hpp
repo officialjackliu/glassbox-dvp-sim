@@ -32,9 +32,9 @@ enum class ReasonCode : std::uint8_t {
 
 enum class NodeId : std::uint8_t {
     coordinator,
-    goldman,
-    jpm,
-    citadel,
+    bank_a,
+    bank_b,
+    bank_c,
 };
 
 constexpr std::string_view to_string(NodeId node) noexcept
@@ -42,12 +42,12 @@ constexpr std::string_view to_string(NodeId node) noexcept
     switch (node) {
     case NodeId::coordinator:
         return "COORD";
-    case NodeId::goldman:
-        return "GOLDMAN";
-    case NodeId::jpm:
-        return "JPM";
-    case NodeId::citadel:
-        return "CITADEL";
+    case NodeId::bank_a:
+        return "BANK_A";
+    case NodeId::bank_b:
+        return "BANK_B";
+    case NodeId::bank_c:
+        return "BANK_C";
     }
     return "UNKNOWN";
 }
@@ -59,14 +59,14 @@ constexpr std::optional<NodeId> node_id_from_string(std::string_view name) noexc
     if (name == "COORD") {
         return NodeId::coordinator;
     }
-    if (name == "GOLDMAN") {
-        return NodeId::goldman;
+    if (name == "BANK_A") {
+        return NodeId::bank_a;
     }
-    if (name == "JPM") {
-        return NodeId::jpm;
+    if (name == "BANK_B") {
+        return NodeId::bank_b;
     }
-    if (name == "CITADEL") {
-        return NodeId::citadel;
+    if (name == "BANK_C") {
+        return NodeId::bank_c;
     }
     return std::nullopt;
 }

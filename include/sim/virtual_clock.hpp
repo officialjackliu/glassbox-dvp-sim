@@ -13,6 +13,7 @@
 #include <functional>
 #include <optional>
 #include <ostream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -26,8 +27,13 @@ class VirtualClock {
         return now_us_;
     }
 
-    [[nodiscard]] std::optional<Event> pop_next(EventQueue& queue) noexcept
+    [[nodiscard]] std::optional<Event> pop_next(EventQueue& queue)
     {
+        const auto earliest = queue.peek();
+        if (earliest && earliest->time_us < now_us_) {
+            throw std::invalid_argument(
+                "event timestamp is earlier than the virtual clock");
+        }
         // Called once per discrete-event loop iteration. The queue, rather than
         // wall time, determines the next event and the value returned here.
         auto event = queue.pop();
@@ -35,9 +41,7 @@ class VirtualClock {
             return std::nullopt;
         }
 
-        if (event->time_us >= now_us_) {
-            now_us_ = event->time_us;
-        }
+        now_us_ = event->time_us;
         return event;
     }
 
@@ -47,18 +51,14 @@ class VirtualClock {
 
 using MeasuredNs = std::uint64_t;
 
-// Times a handler using std::chrono::steady_clock and writes nanoseconds to
-// measured_ns. It is for trace/diagnostic output; callers must not use the
-// result to choose network, protocol, or virtual-time behavior.
 template <typename Handler>
-[[nodiscard]] MeasuredNs measure_handler(Handler&& handler, MeasuredNs& measured_ns)
+[[nodiscard]] MeasuredNs measure_handler(Handler&& handler)
 {
     const auto start = std::chrono::steady_clock::now();
     std::invoke(std::forward<Handler>(handler));
     const auto finish = std::chrono::steady_clock::now();
-    measured_ns = static_cast<MeasuredNs>(
+    return static_cast<MeasuredNs>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count());
-    return measured_ns;
 }
 
 struct SyntheticTraceEvent {

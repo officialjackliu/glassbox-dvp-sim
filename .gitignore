@@ -1,4 +1,5 @@
 /build/
+/build-release/
 /build-ubsan/
 /build-sanitizers/
 /cmake-build-*/

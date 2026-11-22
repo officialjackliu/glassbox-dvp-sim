@@ -4,6 +4,8 @@
 #include <limits>
 #include <type_traits>
 
+// Compile-time and runtime checks for immutable core values and checked integer
+// boundaries. CMake registers this executable with CTest as smoke_test.
 int main()
 {
     static_assert(!std::is_constructible_v<glassbox::Cents, double>);

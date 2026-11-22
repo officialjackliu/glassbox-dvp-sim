@@ -6,7 +6,29 @@ This is an independent, educational, open-source simulator. It is not an impleme
 
 ## Development status
 
-The repository is initialized for the incremental implementation described in `DESIGN.md`. The current executable and test targets are smoke-test scaffolding only.
+The repository is being implemented incrementally from `DESIGN.md`. Each
+stable build chunk is isolated on a short-lived feature branch and merged
+through its tests and code review.
+
+## Source organization
+
+- `include/sim/core_types.hpp` defines immutable IDs, virtual time, money,
+  quantities, node identifiers, reason codes, outcomes, and overflow helpers.
+- `include/sim/event_queue.hpp` owns deterministic `(time_us, seq)` event
+  ordering. The simulator and scenario code call `schedule()`, then
+  `pop_next()` through `VirtualClock`.
+- `include/sim/virtual_clock.hpp` advances only as events are popped. It also
+  wraps `std::chrono::steady_clock` for measured handler nanoseconds;
+  `measured_ns` is never used for simulation decisions.
+- `include/sim/deterministic_rng.hpp` owns scenario random state and centralizes
+  jitter, PPM drop, and network draw behavior.
+- `src/main.cpp` is the integration smoke executable. It constructs core values,
+  schedules two events, steps them through virtual time, and emits a synthetic
+  trace line.
+
+Source headers explain public responsibility and typical callers. Implementation
+comments are intentionally limited to ordering, ownership, overflow, and
+determinism rules that are not obvious from the code.
 
 ## Requirements
 
@@ -17,19 +39,47 @@ The repository is initialized for the incremental implementation described in `D
 ## Build
 
 ```sh
-cmake -S . -B build
+cmake -S . -B build \
+  -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++
 cmake --build build
 ctest --test-dir build --output-on-failure
+```
+
+`CMakeLists.txt` creates one executable per source integration test and registers
+each test with CTest. `-Wall -Wextra -Wpedantic` is enabled for all targets.
+
+## Tests
+
+The tests currently cover core values, event ordering, virtual timing, and
+seeded RNG behavior.
+
+Run the full suite:
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
+Run one component test:
+
+```sh
+ctest --test-dir build -R deterministic_rng_test --output-on-failure
+ctest --test-dir build -R event_queue_test --output-on-failure
+ctest --test-dir build -R virtual_clock_test --output-on-failure
+```
+
+Run the integration executable:
+
+```sh
+./build/glassbox-dvp-sim
 ```
 
 ## Sanitizers
 
 ```sh
-cmake -S . -B build-sanitizers \
-  -DGLASSBOX_ENABLE_ASAN=ON \
+cmake -S . -B build-ubsan \
   -DGLASSBOX_ENABLE_UBSAN=ON
-cmake --build build-sanitizers
-ctest --test-dir build-sanitizers --output-on-failure
+cmake --build build-ubsan
+ctest --test-dir build-ubsan --output-on-failure
 ```
 
 ## Simplifications

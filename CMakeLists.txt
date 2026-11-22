@@ -39,6 +39,7 @@ target_include_directories(glassbox-dvp-sim PRIVATE include)
 
 enable_testing()
 
+# Small executable checks cover core types and serve as CTest smoke coverage.
 add_executable(smoke_test
     tests/smoke_test.cpp
 )
@@ -46,6 +47,7 @@ add_executable(smoke_test
 target_include_directories(smoke_test PRIVATE include)
 add_test(NAME smoke_test COMMAND smoke_test)
 
+# Component test executables mirror implemented source modules.
 add_executable(event_queue_test
     tests/event_queue_test.cpp
 )

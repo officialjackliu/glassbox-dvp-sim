@@ -5,6 +5,11 @@
 #include <cassert>
 #include <iostream>
 
+// Integration smoke executable:
+// 1. Builds representative core values.
+// 2. Inserts script and message events into the virtual queue.
+// 3. Steps events through VirtualClock.
+// 4. Emits a synthetic trace line with separate simulation and measured time.
 int main()
 {
     const glassbox::TradeId trade_id{1};

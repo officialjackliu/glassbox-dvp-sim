@@ -3,6 +3,10 @@
 #include <cassert>
 #include <sstream>
 
+// Focused VirtualClock and timing test:
+// verifies zero start, monotonic virtual time, separate measured_ns capture,
+// and synthetic trace emission. measured_ns is deliberately not used to decide
+// which state or event comes next.
 int main()
 {
     glassbox::VirtualClock clock;

@@ -21,6 +21,7 @@ namespace glassbox {
 
 enum class EventKind : std::uint8_t {
     deliver_message,
+    drop_message,
     fire_timer,
     node_crash,
     node_restart,
@@ -33,10 +34,29 @@ enum class TimerKind : std::uint8_t {
     decision_wait,
 };
 
+enum class DropReason : std::uint8_t {
+    random,
+    partition,
+    node_down,
+    next_message,
+};
+
 struct DeliverMessageEvent {
     std::string msg_type;
     NodeId from;
     NodeId to;
+    SimTimeUs sent_at_us;
+    SimTimeUs deliver_at_us;
+    SimTimeUs simulated_latency_us;
+};
+
+struct DropMessageEvent {
+    std::string msg_type;
+    NodeId from;
+    NodeId to;
+    DropReason reason;
+    SimTimeUs sent_at_us;
+    SimTimeUs deliver_at_us;
 };
 
 struct FireTimerEvent {
@@ -60,6 +80,7 @@ struct ScriptActionEvent {
 using EventPayload = std::variant<
     std::monostate,
     DeliverMessageEvent,
+    DropMessageEvent,
     FireTimerEvent,
     NodeCrashEvent,
     NodeRestartEvent,

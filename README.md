@@ -22,6 +22,9 @@ through its tests and code review.
   `measured_ns` is never used for simulation decisions.
 - `include/sim/deterministic_rng.hpp` owns scenario random state and centralizes
   jitter, PPM drop, and network draw behavior.
+- `include/sim/network_model.hpp` owns directed links, partitions, node-down
+  state, next-message drops, and random delivery scheduling. Default regional
+  values are illustrative placeholders and every directed link is configurable.
 - `src/main.cpp` is the integration smoke executable. It constructs core values,
   schedules two events, steps them through virtual time, and emits a synthetic
   trace line.

@@ -26,6 +26,9 @@ int main()
             "PREPARE",
             glassbox::NodeId::coordinator,
             glassbox::NodeId::bank_a,
+            20,
+            21,
+            1,
         });
     CHECK(script_seq.has_value());
     CHECK(message_seq.has_value());

@@ -47,6 +47,14 @@ int main()
     }
 
     first.reset();
+    for (int i = 0; i < 1000; ++i) {
+        const auto negative_range =
+            first.uniform_i64(-100, -1);
+        CHECK(negative_range >= -100);
+        CHECK(negative_range <= -1);
+    }
+
+    first.reset();
     const auto zero_drop = glassbox::draw_network_delivery(first, 100, 10, 0);
     CHECK(zero_drop.latency_us >= 90);
     CHECK(zero_drop.latency_us <= 110);

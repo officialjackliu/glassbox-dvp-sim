@@ -66,19 +66,47 @@ class DeterministicRng {
             static_cast<void>(uniform_u64(1));
             return lower;
         }
-        if (lower == std::numeric_limits<std::int64_t>::min() &&
-            upper == std::numeric_limits<std::int64_t>::max()) {
-            return static_cast<std::int64_t>(engine_());
+        if (lower >= 0) {
+            const std::uint64_t width_minus_one =
+                static_cast<std::uint64_t>(upper) -
+                static_cast<std::uint64_t>(lower);
+            const std::uint64_t offset =
+                uniform_u64(width_minus_one + 1);
+            return lower + static_cast<std::int64_t>(offset);
+        }
+        if (upper < 0) {
+            const std::uint64_t lower_magnitude =
+                static_cast<std::uint64_t>(-(lower + 1)) + 1;
+            const std::uint64_t upper_magnitude =
+                static_cast<std::uint64_t>(-(upper + 1)) + 1;
+            const std::uint64_t negative_count =
+                lower_magnitude - upper_magnitude + 1;
+            const std::uint64_t offset = uniform_u64(negative_count);
+            return lower + static_cast<std::int64_t>(offset);
         }
 
-        const std::uint64_t width_minus_one =
-            static_cast<std::uint64_t>(upper) -
-            static_cast<std::uint64_t>(lower);
-        const std::uint64_t offset =
-            uniform_u64(width_minus_one + 1);
-        const std::uint64_t mapped =
-            static_cast<std::uint64_t>(lower) + offset;
-        return static_cast<std::int64_t>(mapped);
+        const std::uint64_t negative_count =
+            static_cast<std::uint64_t>(-(lower + 1)) + 1;
+        const std::uint64_t positive_count =
+            static_cast<std::uint64_t>(upper) + 1;
+        const std::uint64_t span = negative_count + positive_count;
+        if (span == 0) {
+            const std::uint64_t raw = engine_();
+            if (raw <
+                (std::uint64_t{1} << 63)) {
+                return static_cast<std::int64_t>(raw);
+            }
+            const std::uint64_t offset =
+                raw - (std::uint64_t{1} << 63);
+            return std::numeric_limits<std::int64_t>::min() +
+                   static_cast<std::int64_t>(offset);
+        }
+        const std::uint64_t offset = uniform_u64(span);
+        if (offset < negative_count) {
+            return lower + static_cast<std::int64_t>(offset);
+        }
+        return static_cast<std::int64_t>(
+            offset - negative_count);
     }
 
     void reset() noexcept

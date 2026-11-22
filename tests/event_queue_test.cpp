@@ -1,20 +1,19 @@
 #include "sim/event_queue.hpp"
+#include "check.hpp"
 
-#include <cassert>
-#include <optional>
 #include <string>
 
 // Focused EventQueue integration test:
 // verifies empty behavior, equal-time FIFO sequence, earlier-time ordering,
-// negative-time rejection, and a small virtual-time crash/restart harness.
+// negative-time rejection, and a virtual-time crash/restart harness.
 int main()
 {
     glassbox::EventQueue queue;
 
-    assert(queue.empty());
-    assert(queue.size() == 0);
-    assert(!queue.peek());
-    assert(!queue.pop());
+    CHECK(queue.empty());
+    CHECK(queue.size() == 0);
+    CHECK(!queue.peek());
+    CHECK(!queue.pop());
 
     const auto first = queue.schedule(
         100,
@@ -29,55 +28,61 @@ int main()
         glassbox::EventKind::script_action,
         glassbox::ScriptActionEvent{"earlier"});
 
-    assert(first && first->value() == 0);
-    assert(second && second->value() == 1);
-    assert(earlier && earlier->value() == 2);
-    assert(queue.size() == 3);
+    CHECK(first && first->value() == 0);
+    CHECK(second && second->value() == 1);
+    CHECK(earlier && earlier->value() == 2);
+    CHECK(queue.size() == 3);
 
-    auto earliest = queue.pop();
-    assert(earliest);
-    assert(earliest->time_us == 50);
-    assert(earliest->seq.value() == 2);
+    const auto earliest = queue.pop();
+    CHECK(earliest);
+    CHECK(earliest->time_us == 50);
+    CHECK(earliest->seq.value() == 2);
 
-    auto first_at_equal_time = queue.pop();
-    assert(first_at_equal_time);
-    assert(first_at_equal_time->time_us == 100);
-    assert(first_at_equal_time->seq.value() == 0);
-    assert(std::get<glassbox::ScriptActionEvent>(
-               first_at_equal_time->payload)
-               .name == "first");
+    const auto first_at_equal_time = queue.pop();
+    CHECK(first_at_equal_time);
+    CHECK(first_at_equal_time->time_us == 100);
+    CHECK(first_at_equal_time->seq.value() == 0);
+    CHECK(std::get<glassbox::ScriptActionEvent>(
+              first_at_equal_time->payload)
+              .name == "first");
 
-    auto second_at_equal_time = queue.pop();
-    assert(second_at_equal_time);
-    assert(second_at_equal_time->time_us == 100);
-    assert(second_at_equal_time->seq.value() == 1);
-    assert(std::get<glassbox::ScriptActionEvent>(
-               second_at_equal_time->payload)
-               .name == "second");
+    const auto second_at_equal_time = queue.pop();
+    CHECK(second_at_equal_time);
+    CHECK(second_at_equal_time->time_us == 100);
+    CHECK(second_at_equal_time->seq.value() == 1);
+    CHECK(std::get<glassbox::ScriptActionEvent>(
+              second_at_equal_time->payload)
+              .name == "second");
 
-    assert(queue.empty());
-    assert(queue.size() == 0);
-    assert(!queue.pop());
+    CHECK(queue.empty());
+    CHECK(queue.size() == 0);
+    CHECK(!queue.pop());
 
-    assert(!queue.schedule(-1, glassbox::EventKind::node_crash,
-                           glassbox::NodeCrashEvent{glassbox::NodeId::jpm}));
+    CHECK(!queue.schedule(-1, glassbox::EventKind::node_crash,
+                          glassbox::NodeCrashEvent{glassbox::NodeId::bank_b}));
 
     glassbox::EventQueue harness;
-    assert(harness.schedule(
+    const auto crash_seq = harness.schedule(
         10,
         glassbox::EventKind::node_crash,
-        glassbox::NodeCrashEvent{glassbox::NodeId::goldman}));
-    assert(harness.schedule(
+        glassbox::NodeCrashEvent{glassbox::NodeId::bank_a});
+    const auto restart_seq = harness.schedule(
         20,
         glassbox::EventKind::node_restart,
-        glassbox::NodeRestartEvent{glassbox::NodeId::goldman}));
+        glassbox::NodeRestartEvent{glassbox::NodeId::bank_a});
+    CHECK(crash_seq.has_value());
+    CHECK(restart_seq.has_value());
 
     glassbox::SimTimeUs virtual_time = 0;
-    virtual_time = harness.pop()->time_us;
-    assert(virtual_time == 10);
-    virtual_time = harness.pop()->time_us;
-    assert(virtual_time == 20);
-    assert(harness.empty());
+    const auto crash = harness.pop();
+    CHECK(crash);
+    virtual_time = crash->time_us;
+    CHECK(virtual_time == 10);
+    const auto restart = harness.pop();
+    CHECK(restart);
+    virtual_time = restart->time_us;
+    CHECK(virtual_time == 20);
+    CHECK(harness.empty());
 
     return 0;
 }

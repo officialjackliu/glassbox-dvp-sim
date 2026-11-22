@@ -47,7 +47,7 @@ A local, deterministic simulation of **atomic Delivery-vs-Payment (DvP) settleme
 ├──────────────────────────────────────────────────────────────────┤
 │ Nodes (pure state machines, no threads, no real time)             │
 │   ├── Coordinator  (also sequences trades in v1)                  │
-│   └── Participant × 3  (GOLDMAN, JPM, CITADEL; each owns a ledger │
+│   └── Participant × 3  (BANK_A, BANK_B, BANK_C; each owns a ledger │
 │                         and a durable log)                        │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -80,7 +80,7 @@ Key properties:
 - Switches: `partitioned(a, b)` (drop all), `node_down(n)` (drop all inbound while down).
 - Delivery time = `send_time + latency`. Because of jitter, **messages may be reordered**. Handlers must tolerate that (see 6.3).
 - Illustrative default one-way latencies (ms): NY↔London 35, NY↔Singapore 120, London↔Singapore 85, intra-region 1. These are placeholders for the demo, not measurements. Make them configurable.
-- Default placement: coordinator in NY; GOLDMAN in NY; JPM in London; CITADEL in Singapore.
+- Default placement: coordinator in NY; BANK_A in NY; BANK_B in London; BANK_C in Singapore.
 
 ### 3.3 Node interface (suggested)
 
@@ -289,16 +289,16 @@ Each scenario is a function that builds a config + script, runs to quiescence, a
 | S2 | Buyer lacks funds | Buyer cash < price | Buyer votes no; seller (already locked) receives `ABORT` and **releases its lock**; no balance changes. |
 | S3 | Account frozen | `freeze_account(seller)` | Seller votes no (`ACCOUNT_FROZEN`); buyer's lock released. |
 | S4 | Slow link, tight timeout | Singapore link latency > `vote_timeout / 2` | Coordinator aborts on timeout; late `VOTE yes` is answered with `ABORT`; both release. **False abort.** Raising the timeout makes the same trade commit. |
-| S5 | Participant dead before voting | `node_down(JPM)` before `PREPARE` | Coordinator times out, aborts; buyer releases lock. JPM on restart sees `ABORT`/tombstone path if it receives it, or presumed abort if it queries. |
-| S6 | **In-doubt participant** | Crash GOLDMAN `AFTER_FIRST_SEND` on `PREPARE` (vote sent), restart later | Coordinator commits; JPM commits; GOLDMAN restarts, finds `PREPARED` with no outcome, sends `OUTCOME_QUERY`, receives `COMMIT`, applies. **Lock-held time spans the outage.** |
-| S7 | Crash after vote logged, before sending | Crash GOLDMAN `AFTER_LOG_BEFORE_SEND` on `PREPARE` | Coordinator never sees a vote, times out, aborts; GOLDMAN restarts in-doubt, queries, gets `ABORT`. |
-| S8 | Crash before logging | Crash GOLDMAN `BEFORE_LOG` on `PREPARE` | No record and no lock survive; coordinator times out and aborts; GOLDMAN restarts clean. |
+| S5 | Participant dead before voting | `node_down(BANK_B)` before `PREPARE` | Coordinator times out, aborts; buyer releases lock. BANK_B on restart sees `ABORT`/tombstone path if it receives it, or presumed abort if it queries. |
+| S6 | **In-doubt participant** | Crash BANK_A `AFTER_FIRST_SEND` on `PREPARE` (vote sent), restart later | Coordinator commits; BANK_B commits; BANK_A restarts, finds `PREPARED` with no outcome, sends `OUTCOME_QUERY`, receives `COMMIT`, applies. **Lock-held time spans the outage.** |
+| S7 | Crash after vote logged, before sending | Crash BANK_A `AFTER_LOG_BEFORE_SEND` on `PREPARE` | Coordinator never sees a vote, times out, aborts; BANK_A restarts in-doubt, queries, gets `ABORT`. |
+| S8 | Crash before logging | Crash BANK_A `BEFORE_LOG` on `PREPARE` | No record and no lock survive; coordinator times out and aborts; BANK_A restarts clean. |
 | S9 | Coordinator crash after decision | Crash coordinator `AFTER_LOG_BEFORE_SEND` on the deciding vote | Participants stay in-doubt, retrying `OUTCOME_QUERY`; coordinator restarts, resends `COMMIT`; all commit. **Shows 2PC is blocking.** |
 | S10 | Coordinator crash mid-broadcast | Crash coordinator `AFTER_FIRST_SEND` on decision | One participant commits immediately; the other stays in-doubt until the restart resends. |
-| S11 | Lost COMMIT | `drop_next(COMMIT, coord, GOLDMAN)` | Retransmit delivers it; GOLDMAN commits; duplicates are harmless. |
+| S11 | Lost COMMIT | `drop_next(COMMIT, coord, BANK_A)` | Retransmit delivers it; BANK_A commits; duplicates are harmless. |
 | S12 | Duplicate/reordered messages | High jitter, duplicated `PREPARE`/`COMMIT` | State tables handle it; no invariant violations. |
 | S13 | Lock conflict | Two trades need the same bonds; seller can cover only one | Exactly one commits; the other aborts with `INSUFFICIENT_BONDS`. |
-| S14 | Partition | `partition(COORD, CITADEL)` during voting | Timeout abort; after healing, in-doubt participants resolve via query. |
+| S14 | Partition | `partition(COORD, BANK_C)` during voting | Timeout abort; after healing, in-doubt participants resolve via query. |
 
 ### Global invariants (checked after every scenario, and in a randomized soak test)
 1. **Atomicity:** after the system quiesces (all nodes up, network healed), for every trade either both participants are `COMMITTED` or neither is.
@@ -322,12 +322,12 @@ One JSON object per line (JSONL). Everything the UI needs comes from this stream
   "seq": 17,
   "sim_time_us": 120500,
   "trade_id": 3,
-  "node": "GOLDMAN",
+  "node": "BANK_A",
   "kind": "MSG_DELIVER",
   "msg_type": "PREPARE",
   "msg_id": 41,
   "from": "COORD",
-  "to": "GOLDMAN",
+  "to": "BANK_A",
   "sent_at_us": 120000,
   "deliver_at_us": 120500,
   "simulated_latency_us": 500,
@@ -397,7 +397,7 @@ Computed from the trace at the end of a run (and incrementally for live views):
 Text swimlane example (one row per event, time in sim ms):
 
 ```
-t(ms)   GOLDMAN            COORD              JPM
+t(ms)   BANK_A            COORD              BANK_B
 0.0                        PROPOSE #1
 0.1                        ──PREPARE──────────────────────►
 0.1     ◄──PREPARE─────────

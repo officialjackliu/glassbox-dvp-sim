@@ -39,27 +39,46 @@ class DeterministicRng {
 
     [[nodiscard]] std::uint64_t uniform_u64(std::uint64_t upper_bound) noexcept
     {
-        // Produces an integer in [0, upper_bound). Network drop probability
-        // and probability helpers call this with an explicit PPM denominator.
+        // Produces an integer in [0, upper_bound) using rejection sampling.
+        // This avoids implementation-defined standard-library distributions.
         if (upper_bound == 0) {
             return 0;
         }
-        std::uniform_int_distribution<std::uint64_t> distribution(
-            0,
-            upper_bound - 1);
-        return distribution(engine_);
+        const std::uint64_t threshold =
+            (std::numeric_limits<std::uint64_t>::max() - upper_bound + 1) %
+            upper_bound;
+        std::uint64_t value = engine_();
+        while (value < threshold) {
+            value = engine_();
+        }
+        return value % upper_bound;
     }
 
     [[nodiscard]] std::int64_t uniform_i64(std::int64_t lower,
                                            std::int64_t upper) noexcept
     {
-        // Produces an inclusive integer range for jitter. Invalid or reversed
-        // ranges return lower, keeping callers from needing floating point.
-        if (lower >= upper) {
+        // Produces an integer in [lower, upper]. Invalid ranges return lower;
+        // a single-value range still consumes one engine draw.
+        if (lower > upper) {
             return lower;
         }
-        std::uniform_int_distribution<std::int64_t> distribution(lower, upper);
-        return distribution(engine_);
+        if (lower == upper) {
+            static_cast<void>(uniform_u64(1));
+            return lower;
+        }
+        if (lower == std::numeric_limits<std::int64_t>::min() &&
+            upper == std::numeric_limits<std::int64_t>::max()) {
+            return static_cast<std::int64_t>(engine_());
+        }
+
+        const std::uint64_t width_minus_one =
+            static_cast<std::uint64_t>(upper) -
+            static_cast<std::uint64_t>(lower);
+        const std::uint64_t offset =
+            uniform_u64(width_minus_one + 1);
+        const std::uint64_t mapped =
+            static_cast<std::uint64_t>(lower) + offset;
+        return static_cast<std::int64_t>(mapped);
     }
 
     void reset() noexcept
@@ -81,14 +100,17 @@ inline constexpr std::uint32_t drop_probability_denominator = 1'000'000;
 [[nodiscard]] inline bool draw_drop(DeterministicRng& rng,
                                     std::uint32_t probability_ppm) noexcept
 {
+    // Always consume one PPM-sized drop draw, regardless of the configured
+    // probability, so configuration changes do not shift later jitter draws.
+    const std::uint64_t draw =
+        rng.uniform_u64(drop_probability_denominator);
     if (probability_ppm == 0) {
         return false;
     }
     if (probability_ppm >= drop_probability_denominator) {
         return true;
     }
-
-    return rng.uniform_u64(drop_probability_denominator) < probability_ppm;
+    return draw < probability_ppm;
 }
 
 [[nodiscard]] inline SimTimeUs draw_jittered_latency(
@@ -98,9 +120,11 @@ inline constexpr std::uint32_t drop_probability_denominator = 1'000'000;
 {
     // Called by the network model before a message is scheduled. It draws
     // exactly one signed jitter value, then clamps the result to one microsecond.
+    // Always consume one jitter draw. Zero or negative jitter consumes a
+    // single-value draw, preserving the same draw sequence as a jittered link.
     const SimTimeUs jitter =
         jitter_us <= 0
-            ? 0
+            ? rng.uniform_i64(0, 0)
             : rng.uniform_i64(-jitter_us, jitter_us);
 
     if (jitter >= 0) {

@@ -212,3 +212,35 @@ Tests (`scenario_vote_no_test`):
 
 Mutants: 7/7 killed across `scenario_vote_no_test` and `messages_test` (2 only as
 compile-checked table entries).
+
+## Task 17: S4 slow link / tight timeout and S5 participant down
+
+Built:
+- `make_s4_slow_link_tight_timeout(seed)` / `make_s4_with_vote_timeout(seed, timeout)`:
+  BANK_A buys from BANK_C, COORD↔BANK_C set to 300 ms each way by script at t=0.
+- `make_s5_participant_down(seed)`: `node_down(BANK_B)` at t=0, `node_up` at 3 s.
+- Registered S4, S5.
+
+Decisions:
+- S4 uses BANK_C (Singapore) as the seller so the slow link is on the trade's path; the
+  "slow" latency is a script `set_link` at t=0 (both directions), not a config change.
+- S5 uses node_down/node_up as DESIGN.md says; a crash/restart variant is tested too and
+  gives the same drops and resolution. Note for DESIGN §7.2 (still open from CLAUDE.md):
+  with node_down the node keeps volatile state and its timers fire as `node_down`-ignored;
+  with crash the epoch bumps and timers are `stale_epoch`-ignored.
+
+Tests (`scenario_timeout_test`):
+- S4 false abort: no crash, no drops; C's yes leaves 302,200 and arrives 602,200; the
+  timeout fires at 501,100; ABORT(VOTE_TIMEOUT) to A and C at 502,200 and again to C at
+  602,300 (late yes); unlocks exactly at first ABORT arrival (503,200 / 802,200), so no
+  unilateral abort after yes; END at 1,104,300; no balance moved.
+- S4 raised timeout (1 s) commits with exact balance change.
+- Boundary: timeout 601,099 and 601,100 abort (the timer wins the tie at 602,200 by seq),
+  601,101 commits.
+- Deadline cap: 1 s timeout but 400 ms deadline → timer at 401,100, VOTE_TIMEOUT abort.
+- S5: drops `PREPARE/ABORT/ABORT NODE_DOWN` at 36,100 / 537,200 / 1,537,300; A unlocks at
+  503,200; retransmits at 1,502,200 and 3,502,300 target only BANK_B; B gets ABORT at
+  3,537,400, writes a tombstone (durable 3,538,400), ACKs; END at 3,574,500; B never
+  locked or voted. Same for the crash/restart variant and seeds 2–3.
+
+Mutants: 5/5 compilable killed (+1 unused-parameter mutant checked directly).

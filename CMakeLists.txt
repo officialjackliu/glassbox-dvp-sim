@@ -248,3 +248,7 @@ set_tests_properties(cli_no_args PROPERTIES WILL_FAIL TRUE)
 add_executable(scenario_vote_no_test tests/scenario_vote_no_test.cpp)
 target_link_libraries(scenario_vote_no_test PRIVATE glassbox_core)
 add_test(NAME scenario_vote_no_test COMMAND scenario_vote_no_test)
+
+add_executable(scenario_timeout_test tests/scenario_timeout_test.cpp)
+target_link_libraries(scenario_timeout_test PRIVATE glassbox_core)
+add_test(NAME scenario_timeout_test COMMAND scenario_timeout_test)

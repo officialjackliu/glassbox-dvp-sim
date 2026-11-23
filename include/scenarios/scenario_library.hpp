@@ -21,4 +21,23 @@ namespace glassbox {
 // from genesis). BANK_B votes no (ACCOUNT_FROZEN); BANK_A releases its lock.
 [[nodiscard]] ScenarioSetup make_s3_account_frozen(std::uint64_t seed);
 
+// S4: BANK_A buys from BANK_C; the COORD<->BANK_C link is slowed to
+// k_s4_slow_link_us each way (> vote_timeout / 2). With the default 500 ms
+// vote timeout the coordinator aborts before BANK_C's yes arrives (false
+// abort). make_s4_with_vote_timeout() is the same setup with another
+// timeout, e.g. a raised one under which the same trade commits.
+inline constexpr SimTimeUs k_s4_slow_link_us = 300'000;
+[[nodiscard]] ScenarioSetup make_s4_slow_link_tight_timeout(
+    std::uint64_t seed);
+[[nodiscard]] ScenarioSetup make_s4_with_vote_timeout(
+    std::uint64_t seed,
+    SimTimeUs vote_timeout_us);
+
+// S5: BANK_B is node_down from t=0 (before PREPARE) and comes back up at
+// k_s5_node_up_us. The coordinator times out and aborts; BANK_A releases;
+// after BANK_B is up, a retransmitted ABORT reaches it and it writes a
+// tombstone and ACKs.
+inline constexpr SimTimeUs k_s5_node_up_us = 3'000'000;
+[[nodiscard]] ScenarioSetup make_s5_participant_down(std::uint64_t seed);
+
 } // namespace glassbox

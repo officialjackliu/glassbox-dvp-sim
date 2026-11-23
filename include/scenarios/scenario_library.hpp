@@ -40,6 +40,25 @@ inline constexpr SimTimeUs k_s4_slow_link_us = 300'000;
 inline constexpr SimTimeUs k_s5_node_up_us = 3'000'000;
 [[nodiscard]] ScenarioSetup make_s5_participant_down(std::uint64_t seed);
 
+// S6: BANK_A crashes AFTER_FIRST_SEND on PREPARE (its yes vote leaves) and
+// restarts k_s6_restart_after_us later. The coordinator commits; BANK_A
+// recovers in doubt, asks with OUTCOME_QUERY, and applies the COMMIT.
+inline constexpr SimTimeUs k_s6_restart_after_us = 5'000'000;
+[[nodiscard]] ScenarioSetup make_s6_in_doubt_participant(std::uint64_t seed);
+
+// S7: BANK_A crashes AFTER_LOG_BEFORE_SEND on PREPARE (PREPARED durable, no
+// vote sent). The coordinator times out and aborts; BANK_A restarts in
+// doubt, queries, and gets ABORT.
+inline constexpr SimTimeUs k_s7_restart_after_us = 2'000'000;
+[[nodiscard]] ScenarioSetup make_s7_crash_before_vote_sent(
+    std::uint64_t seed);
+
+// S8: BANK_A crashes BEFORE_LOG on PREPARE: no record, no lock survive. The
+// coordinator times out and aborts; BANK_A restarts clean and later writes
+// a tombstone when a retransmitted ABORT reaches it.
+inline constexpr SimTimeUs k_s8_restart_after_us = 2'000'000;
+[[nodiscard]] ScenarioSetup make_s8_crash_before_log(std::uint64_t seed);
+
 // S13: BANK_B (seller) holds k_s13_seller_bonds bonds, enough for one
 // standard trade but not two. Trade 1 (BANK_A buys) and trade 2 (BANK_C
 // buys) are submitted at t=0 in that order; both PREPAREs reach BANK_B at

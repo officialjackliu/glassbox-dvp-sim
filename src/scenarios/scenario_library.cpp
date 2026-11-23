@@ -78,6 +78,45 @@ ScenarioSetup make_s5_participant_down(std::uint64_t seed)
     return setup;
 }
 
+namespace {
+
+[[nodiscard]] ScenarioSetup bank_a_prepare_crash(std::uint64_t seed,
+                                                 CrashPoint point,
+                                                 SimTimeUs restart_after_us)
+{
+    ScenarioSetup setup = base_setup(seed);
+    setup.script.push_back(submit(0, standard_trade()));
+    setup.crashes.push_back(CrashSpec{
+        NodeId::bank_a,
+        TradeId{1},
+        CrashTrigger{MessageType::prepare},
+        point,
+        restart_after_us,
+        1,
+    });
+    return setup;
+}
+
+} // namespace
+
+ScenarioSetup make_s6_in_doubt_participant(std::uint64_t seed)
+{
+    return bank_a_prepare_crash(seed, CrashPoint::after_first_send,
+                                k_s6_restart_after_us);
+}
+
+ScenarioSetup make_s7_crash_before_vote_sent(std::uint64_t seed)
+{
+    return bank_a_prepare_crash(seed, CrashPoint::after_log_before_send,
+                                k_s7_restart_after_us);
+}
+
+ScenarioSetup make_s8_crash_before_log(std::uint64_t seed)
+{
+    return bank_a_prepare_crash(seed, CrashPoint::before_log,
+                                k_s8_restart_after_us);
+}
+
 ScenarioSetup make_s13_lock_conflict(std::uint64_t seed)
 {
     ScenarioSetup setup = base_setup(seed);

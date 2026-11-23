@@ -319,3 +319,31 @@ scratch ASan build dir, fixed the receiver to only count, and now run new test b
 under a 30 s alarm first and ctest with `--timeout`. Two expectations in that new test were
 also wrong (I forgot the timer batch's own flush + processing delay); corrected after
 printing the actual event list.
+
+## Task 20: S6–S8 participant crash and recovery
+
+Built: `make_s6_in_doubt_participant` (BANK_A AFTER_FIRST_SEND on PREPARE, restart after
+5 s), `make_s7_crash_before_vote_sent` (AFTER_LOG_BEFORE_SEND, restart after 2 s),
+`make_s8_crash_before_log` (BEFORE_LOG, restart after 2 s), all on trade 1 via
+`ScenarioSetup.crashes`. Registered S6–S8 (registry stays in id order, tested).
+
+Decisions: restart delays chosen so that each scenario shows its intended path
+(S6: in-doubt beyond two COMMIT retransmits; S7: participant queries before the
+coordinator's second ABORT retransmit; S8: second ABORT retransmit finds the clean node).
+Outcomes are also checked for restart delays 1 ms / 100 ms / 2.5 s / 9 s.
+
+Tests (`scenario_participant_crash_test`):
+- S6: crash at 3,200 after the yes leaves; just after restart (5,003,200) the lock and
+  PREPARED state are restored from the log; three COMMIT drops (74,300 / 1,074,400 /
+  3,074,500); OUTCOME_QUERY 5,003,300 → COMMIT 5,005,400 → APPLY → COMMITTED 5,006,400
+  → ACK → END 5,008,500; lock held from 2,100 to 5,005,400 (spans the outage).
+- S7: crash at 3,100 with PREPARED durable and no vote sent; VOTE_TIMEOUT abort
+  (DECISION_ABORT 502,100); two ABORT drops; BANK_B unlocks 537,200; BANK_A queries
+  2,003,200, gets ABORT(VOTE_TIMEOUT) at 2,004,300 send, unlocks 2,005,300; END 2,008,400.
+- S8: crash at 2,100 before logging; after restart no record, no trade, no lock, no
+  query; second ABORT retransmit arrives 3,503,400 → tombstone durable 3,504,400; END
+  3,506,500.
+- Outcome independent of restart delay (4 values × 3 scenarios), invariants everywhere.
+
+Mutants: 5/5 killed (crash points swapped between scenarios, restart query removed,
+replayed ledger ignored, coordinator outcome-query reply removed).

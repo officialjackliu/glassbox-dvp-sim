@@ -260,3 +260,7 @@ add_test(NAME scenario_lock_conflict_test COMMAND scenario_lock_conflict_test)
 add_executable(crash_points_test tests/crash_points_test.cpp)
 target_link_libraries(crash_points_test PRIVATE glassbox_core)
 add_test(NAME crash_points_test COMMAND crash_points_test)
+
+add_executable(scenario_participant_crash_test tests/scenario_participant_crash_test.cpp)
+target_link_libraries(scenario_participant_crash_test PRIVATE glassbox_core)
+add_test(NAME scenario_participant_crash_test COMMAND scenario_participant_crash_test)

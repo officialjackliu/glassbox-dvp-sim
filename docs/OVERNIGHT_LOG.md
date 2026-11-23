@@ -271,3 +271,51 @@ and added the exact decision durable times (73,200 / 243,200).
 
 Mutants: 3/3 killed (seller bonds 40→50, second submission delayed 1 µs, and the ledger's
 `available < amount` flipped to `<=`).
+
+## Task 19: crash points and node restart
+
+Built:
+- `include/faults/crash_spec.hpp`: `CrashPoint {BEFORE_LOG, AFTER_LOG_BEFORE_SEND,
+  AFTER_FIRST_SEND}`, `CrashSpec {node, trade_id?, trigger (MessageType | TimerKind),
+  point, restart_after_us?, occurrence}`.
+- `Simulator::add_crash_spec()` (rejects occurrence 0 and negative restart delay),
+  `pending_crash_specs()`. Specs are one-shot and matched on message delivery / timer fire
+  against the batch the handler returns (`apply_effects_impl`):
+  - BEFORE_LOG: crash immediately; nothing from the batch is logged, sent, or timed.
+  - AFTER_LOG_BEFORE_SEND: records flush as usual; a crash event is scheduled at the flush
+    time, after the flush event; sends and timers of the batch are never scheduled.
+  - AFTER_FIRST_SEND: flush, only the first send is scheduled, crash event right after
+    its release.
+  - `restart_after_us` schedules a restart that long after the crash time.
+- CRASH trace records carry the crash point as `reason`; `NodeCrashEvent` has an optional
+  reason. `ScenarioSetup.crashes` registers specs for scenario runs.
+
+Decisions:
+- **`occurrence` field** (fire on the N-th match, default 1) added to the DESIGN.md
+  CrashSpec, so S9 can target "the deciding VOTE" (the second VOTE of a trade).
+- Lost sends/timers are *not scheduled* rather than scheduled-then-epoch-dropped, so the
+  semantics hold even with `processing_delay_us = 0` (flush, first send and crash at the
+  same instant still run in that order; tested).
+- AFTER_LOG_BEFORE_SEND on a batch with no logs crashes immediately (nothing to wait for);
+  AFTER_FIRST_SEND on a batch with no sends behaves like AFTER_LOG_BEFORE_SEND.
+- Multiple specs matching one event: each counts the event; the first in registration
+  order that reaches its occurrence fires.
+
+Tests (`crash_points_test`): exact BANK_A event sequences (LOG_APPEND / MSG_SEND /
+TIMER_SET / CRASH reason / RESTART with times) for no-crash, each crash point, zero
+processing delay, and no-log batches; matching by trade id, occurrence 2 (fires once),
+wrong node/type, timer trigger; invalid specs rejected; pre-crash timer ignored with
+`stale_epoch` after restart; message to a down node dropped `NODE_DOWN`; restart sees the
+durable log; protocol: BANK_A crashes right after its yes (restart 2 s later, in doubt,
+queries, commits) plus coordinator crash/restart at quiescence; **recovery idempotence**:
+crash+restart all four nodes once and twice at quiescence for S1, S2, S4, S13 gives the same
+recoverable state (trade states, decisions, acks, ledgers), no new messages, no recovery
+errors. Mutants: 15/15 killed.
+
+Incident: my first version of the probe bench had the BANK_B receiver inherit the probe's
+"send two messages" behaviour, sending to itself, so the message count grew exponentially.
+The test ran ~10 min, swapped, and filled the disk (ENOSPC). I stopped it, freed my own
+scratch ASan build dir, fixed the receiver to only count, and now run new test binaries
+under a 30 s alarm first and ctest with `--timeout`. Two expectations in that new test were
+also wrong (I forgot the timer batch's own flush + processing delay); corrected after
+printing the actual event list.

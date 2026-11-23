@@ -256,3 +256,7 @@ add_test(NAME scenario_timeout_test COMMAND scenario_timeout_test)
 add_executable(scenario_lock_conflict_test tests/scenario_lock_conflict_test.cpp)
 target_link_libraries(scenario_lock_conflict_test PRIVATE glassbox_core)
 add_test(NAME scenario_lock_conflict_test COMMAND scenario_lock_conflict_test)
+
+add_executable(crash_points_test tests/crash_points_test.cpp)
+target_link_libraries(crash_points_test PRIVATE glassbox_core)
+add_test(NAME crash_points_test COMMAND crash_points_test)

@@ -7,6 +7,7 @@
 // the trace sink. Node implementations remain pure and communicate only via
 // Message, TimerEvent, and Effects.
 
+#include "faults/crash_spec.hpp"
 #include "sim/deterministic_rng.hpp"
 #include "sim/effects.hpp"
 #include "sim/network_model.hpp"
@@ -104,8 +105,15 @@ class Simulator {
         Effects effects,
         SimTimeUs now);
 
-    void crash_node(NodeId node);
+    // reason, when given, is traced on the CRASH record.
+    void crash_node(NodeId node,
+                    std::optional<std::string> reason = std::nullopt);
     void restart_node(NodeId node);
+
+    // Registers a one-shot crash point. Returns false (and registers
+    // nothing) if occurrence is 0 or restart_after_us is negative.
+    [[nodiscard]] bool add_crash_spec(const CrashSpec& spec);
+    [[nodiscard]] std::size_t pending_crash_specs() const noexcept;
 
     VirtualClock& clock() noexcept;
     EventQueue& events() noexcept;
@@ -134,6 +142,18 @@ class Simulator {
                           SequenceId seq);
     void dispatch_script(const ScriptActionEvent& payload,
                          SequenceId seq);
+    // Returns the spec that fires for this event (and consumes it), if any.
+    [[nodiscard]] std::optional<CrashSpec> take_crash_spec(
+        NodeId node,
+        const CrashTrigger& trigger,
+        std::optional<TradeId> trade_id);
+    [[nodiscard]] std::optional<MeasuredNs> apply_effects_impl(
+        NodeId source,
+        Effects effects,
+        SimTimeUs now,
+        const std::optional<CrashSpec>& crash);
+    void schedule_spec_crash(const CrashSpec& spec, SimTimeUs at);
+
     void deliver_to_node(NodeId target,
                          const Message& message,
                          SequenceId seq);
@@ -167,6 +187,11 @@ class Simulator {
     std::array<DurableLog, k_node_count> durable_logs_{};
     std::uint64_t trace_seq_ = 0;
     std::uint64_t next_msg_id_ = 1;
+    struct ArmedCrash {
+        CrashSpec spec;
+        std::uint32_t matches = 0;
+    };
+    std::vector<ArmedCrash> crash_specs_;
 };
 
 } // namespace glassbox

@@ -90,6 +90,11 @@ ScenarioRun::ScenarioRun(const ScenarioSetup& setup, TraceSink* echo)
       simulator_(setup.config, sink_),
       nodes_(install_protocol_nodes(simulator_, setup.genesis))
 {
+    for (const CrashSpec& crash : setup.crashes) {
+        if (!simulator_.add_crash_spec(crash)) {
+            throw std::invalid_argument("invalid crash spec");
+        }
+    }
     for (const TimedAction& step : setup.script) {
         if (!simulator_.schedule_script(step.at, step.action)) {
             throw std::invalid_argument("scenario script step not schedulable");

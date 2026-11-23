@@ -142,15 +142,41 @@ std::optional<MeasuredNs> Simulator::apply_effects(
     Effects effects,
     SimTimeUs now)
 {
+    return apply_effects_impl(source, std::move(effects), now, std::nullopt);
+}
+
+std::optional<MeasuredNs> Simulator::apply_effects_impl(
+    NodeId source,
+    Effects effects,
+    SimTimeUs now,
+    const std::optional<CrashSpec>& crash)
+{
     if (!node_up(source)) {
         return std::nullopt;
     }
 
     const std::uint64_t source_epoch = epoch(source);
 
-    // Crash-point seam:
-    // Crash/recovery injection can run immediately after this batch is
-    // classified and before the flush/send/timer events below are scheduled.
+    // Crash points are relative to this batch (DESIGN.md 7.1).
+    if (crash && crash->point == CrashPoint::before_log) {
+        // Crashes while handling: nothing from the batch is logged or sent.
+        crash_node(source, std::string{to_string(crash->point)});
+        schedule_spec_crash(*crash, -1);
+        return std::nullopt;
+    }
+    const bool had_sends = !effects.sends.empty();
+    if (crash) {
+        // Lost messages are never scheduled, so no ordering of equal-time
+        // events can release them before the crash. Timers die with the
+        // epoch; drop them too so no TIMER_SET is traced for them.
+        if (crash->point == CrashPoint::after_log_before_send) {
+            effects.sends.clear();
+        } else if (effects.sends.size() > 1) {
+            effects.sends.resize(1);
+        }
+        effects.timers.clear();
+    }
+
     const bool has_logs = !effects.logs.empty();
     const auto durable_time_result =
         checked_add_i64(now, config_.log_flush_delay_us);
@@ -283,10 +309,94 @@ std::optional<MeasuredNs> Simulator::apply_effects(
         }
         emit(std::move(record));
     }
+
+    if (crash) {
+        // Scheduled after this batch's flush and send events, so at equal
+        // times the flush (and first send) happen first.
+        SimTimeUs crash_time = now;
+        if (crash->point == CrashPoint::after_first_send && had_sends) {
+            crash_time = *send_time;
+        } else if (has_logs) {
+            crash_time = durable_time;
+        }
+        schedule_spec_crash(*crash, crash_time);
+    }
     return 0;
 }
 
-void Simulator::crash_node(NodeId node)
+void Simulator::schedule_spec_crash(const CrashSpec& spec, SimTimeUs at)
+{
+    // at < 0 means the crash already happened now (BEFORE_LOG).
+    SimTimeUs crashed_at = clock_.now_us();
+    if (at >= 0) {
+        crashed_at = at;
+        const auto scheduled = schedule_at(
+            at,
+            EventKind::node_crash,
+            NodeCrashEvent{spec.node, std::string{to_string(spec.point)}});
+        if (scheduled.status != ScheduleStatus::scheduled) {
+            emit_trace(SequenceId{0}, clock_.now_us(), "CRASH_REJECTED",
+                       "Simulator::schedule_spec_crash", 0);
+            return;
+        }
+    }
+    if (!spec.restart_after_us) {
+        return;
+    }
+    const auto restart_at = checked_add_i64(crashed_at, *spec.restart_after_us);
+    if (!restart_at ||
+        schedule_at(*restart_at, EventKind::node_restart,
+                    NodeRestartEvent{spec.node})
+                .status != ScheduleStatus::scheduled) {
+        emit_trace(SequenceId{0}, clock_.now_us(), "RESTART_REJECTED",
+                   "Simulator::schedule_spec_crash", 0);
+    }
+}
+
+bool Simulator::add_crash_spec(const CrashSpec& spec)
+{
+    if (spec.occurrence == 0 ||
+        (spec.restart_after_us && *spec.restart_after_us < 0)) {
+        return false;
+    }
+    crash_specs_.push_back(ArmedCrash{spec, 0});
+    return true;
+}
+
+std::size_t Simulator::pending_crash_specs() const noexcept
+{
+    return crash_specs_.size();
+}
+
+std::optional<CrashSpec> Simulator::take_crash_spec(
+    NodeId node,
+    const CrashTrigger& trigger,
+    std::optional<TradeId> trade_id)
+{
+    // Specs are checked in registration order; every matching spec counts
+    // this event, and the first one reaching its occurrence fires.
+    std::optional<std::size_t> fired;
+    for (std::size_t i = 0; i < crash_specs_.size(); ++i) {
+        ArmedCrash& armed = crash_specs_[i];
+        if (armed.spec.node != node || armed.spec.trigger != trigger ||
+            (armed.spec.trade_id && armed.spec.trade_id != trade_id)) {
+            continue;
+        }
+        ++armed.matches;
+        if (!fired && armed.matches == armed.spec.occurrence) {
+            fired = i;
+        }
+    }
+    if (!fired) {
+        return std::nullopt;
+    }
+    CrashSpec spec = crash_specs_[*fired].spec;
+    crash_specs_.erase(crash_specs_.begin() +
+                       static_cast<std::ptrdiff_t>(*fired));
+    return spec;
+}
+
+void Simulator::crash_node(NodeId node, std::optional<std::string> reason)
 {
     const std::size_t index = node_index(node);
     if (!node_up_[index]) {
@@ -311,6 +421,7 @@ void Simulator::crash_node(NodeId node)
         record.handler = "Node::on_crash";
         record.measured_ns = measured;
         record.node = node;
+        record.reason = std::move(reason);
         emit(std::move(record));
     }
 }
@@ -461,10 +572,13 @@ void Simulator::deliver_to_node(NodeId target,
                                        message);
     record.measured_ns = measured;
     emit(std::move(record));
-    static_cast<void>(apply_effects(
+    const auto crash =
+        take_crash_spec(target, CrashTrigger{message.type}, message.trade_id);
+    static_cast<void>(apply_effects_impl(
         target,
         std::move(effects),
-        clock_.now_us()));
+        clock_.now_us(),
+        crash));
 }
 
 void Simulator::dispatch_drop(const DropMessageEvent& payload,
@@ -589,16 +703,19 @@ void Simulator::dispatch_timer(const FireTimerEvent& payload,
     record.handler = "Node::on_timer";
     record.measured_ns = measured;
     emit(std::move(record));
-    static_cast<void>(apply_effects(
+    const auto crash = take_crash_spec(
+        payload.node, CrashTrigger{payload.kind}, payload.trade_id);
+    static_cast<void>(apply_effects_impl(
         payload.node,
         std::move(effects),
-        clock_.now_us()));
+        clock_.now_us(),
+        crash));
 }
 
 void Simulator::dispatch_crash(const NodeCrashEvent& payload,
                                SequenceId)
 {
-    crash_node(payload.node);
+    crash_node(payload.node, payload.reason);
 }
 
 void Simulator::dispatch_restart(const NodeRestartEvent& payload,

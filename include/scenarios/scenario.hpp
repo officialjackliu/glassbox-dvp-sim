@@ -8,6 +8,7 @@
 // keeps the full trace for assertions and the CLI. Expected outcomes live in
 // the scenario tests, not here.
 
+#include "faults/crash_spec.hpp"
 #include "scenarios/protocol_system.hpp"
 #include "sim/simulator.hpp"
 #include "sim/trace.hpp"
@@ -29,6 +30,8 @@ struct ScenarioSetup {
     BankGenesis genesis;
     // Scheduled in vector order, so same-time actions run in that order.
     std::vector<TimedAction> script;
+    // One-shot crash points, registered before the run starts.
+    std::vector<CrashSpec> crashes{};
 };
 
 struct ScenarioInfo {

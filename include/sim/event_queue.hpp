@@ -101,6 +101,8 @@ struct FireTimerEvent {
 
 struct NodeCrashEvent {
     NodeId node;
+    // Set when the crash comes from a CrashSpec; traced as the reason.
+    std::optional<std::string> reason = std::nullopt;
 };
 
 struct NodeRestartEvent {

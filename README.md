@@ -4,6 +4,23 @@ A local, deterministic simulation of atomic Delivery-versus-Payment (DvP) settle
 
 This is an independent, educational, open-source simulator. It is not an implementation of any vendor's system.
 
+## See it run
+
+```sh
+make tour                 # guided demo: S1, S2, S6, S9, S14 in slow motion
+make watch S=S9           # one scenario (SPEED=slow|normal|fast)
+make watch S=S1 SET="vote_timeout=30ms"   # change a setting, watch the outcome change
+make story S=S6           # the same explanation as plain text
+make list                 # all scenarios
+```
+
+The player runs the real simulation first, then replays it event by event:
+each node's balances, locks, votes, timers and disk; every message crossing
+the network; a plain-English explanation of each step with the function that
+ran; and the safety checks after every event. Playback speed only changes how
+fast events are shown, never the result. Keys: space pause, n next event,
++/- speed, r restart, q quit.
+
 ## Development status
 
 The repository is being implemented incrementally from `DESIGN.md`. Each

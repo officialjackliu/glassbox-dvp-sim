@@ -328,6 +328,30 @@ void test_check_message_rejections()
     }
 }
 
+void test_describe_body()
+{
+    CHECK(!glassbox::describe_body(glassbox::MessageBody{}).has_value());
+    CHECK(glassbox::describe_body(glassbox::ProposeBody{make_request()}) ==
+          "BANK_A<-BANK_B");
+    CHECK(glassbox::describe_body(
+              glassbox::PrepareBody{make_trade(TradeId{1}), Leg::seller}) ==
+          "SELLER");
+    CHECK(glassbox::describe_body(
+              glassbox::VoteBody{Vote::yes, ReasonCode::none}) == "YES");
+    CHECK(glassbox::describe_body(glassbox::VoteBody{
+              Vote::no, ReasonCode::account_frozen}) ==
+          "NO:ACCOUNT_FROZEN");
+    CHECK(!glassbox::describe_body(glassbox::CommitBody{}).has_value());
+    CHECK(glassbox::describe_body(
+              glassbox::AbortBody{ReasonCode::vote_timeout}) ==
+          "VOTE_TIMEOUT");
+    CHECK(glassbox::describe_body(glassbox::AckBody{Decision::abort}) ==
+          "ABORT");
+    CHECK(glassbox::describe_body(glassbox::AckBody{Decision::commit}) ==
+          "COMMIT");
+    CHECK(!glassbox::describe_body(glassbox::OutcomeQueryBody{}).has_value());
+}
+
 void test_string_tables()
 {
     CHECK(glassbox::to_string(MessageType::propose) == "PROPOSE");
@@ -627,6 +651,7 @@ void test_drop_trace_carries_reason_and_message()
             CHECK(record.to == NodeId::bank_b);
             CHECK(record.trade_id == TradeId{2});
             CHECK(record.msg_id == 1);
+            CHECK(!record.detail.has_value()); // COMMIT has no payload
             CHECK(record.sim_time_us == 100 + 35'000);
         }
     }
@@ -663,6 +688,7 @@ int main()
     test_builders_are_complete_and_well_formed();
     test_body_type_and_leg_party();
     test_check_message_rejections();
+    test_describe_body();
     test_string_tables();
     test_all_message_types_route_with_bodies_and_unique_ids();
     test_full_message_overload_keeps_draw_order();

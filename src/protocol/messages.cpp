@@ -69,6 +69,32 @@ std::optional<MessageType> body_type(const MessageBody& body) noexcept
         body);
 }
 
+std::optional<std::string> describe_body(const MessageBody& body)
+{
+    if (const auto* propose = std::get_if<ProposeBody>(&body)) {
+        std::string text{to_string(propose->request.buyer)};
+        text += "<-";
+        text += to_string(propose->request.seller);
+        return text;
+    }
+    if (const auto* prepare = std::get_if<PrepareBody>(&body)) {
+        return std::string{to_string(prepare->leg)};
+    }
+    if (const auto* vote = std::get_if<VoteBody>(&body)) {
+        if (vote->vote == Vote::yes) {
+            return std::string{"YES"};
+        }
+        return "NO:" + std::string{to_string(vote->reason)};
+    }
+    if (const auto* abort = std::get_if<AbortBody>(&body)) {
+        return std::string{to_string(abort->reason)};
+    }
+    if (const auto* ack = std::get_if<AckBody>(&body)) {
+        return std::string{to_string(ack->decision)};
+    }
+    return std::nullopt;
+}
+
 NodeId leg_party(const Trade& trade, Leg leg) noexcept
 {
     return leg == Leg::buyer ? trade.buyer() : trade.seller();

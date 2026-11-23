@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <variant>
 
@@ -162,6 +163,12 @@ enum class MessageCheck : std::uint8_t {
 // trade_id matches PREPARE trade, route (sender/receiver roles and leg party),
 // vote reason, abort reason.
 [[nodiscard]] MessageCheck check_message(const Message& message) noexcept;
+
+// Short text for trace/CLI: PREPARE -> leg, VOTE -> "YES" or "NO:<reason>",
+// ABORT -> reason, ACK -> decision, PROPOSE -> "<buyer><-<seller>".
+// nullopt for bodies with no payload (COMMIT, OUTCOME_QUERY, none).
+[[nodiscard]] std::optional<std::string> describe_body(
+    const MessageBody& body);
 
 // The party that owns a leg of a trade.
 [[nodiscard]] NodeId leg_party(const Trade& trade, Leg leg) noexcept;

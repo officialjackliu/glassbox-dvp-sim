@@ -179,3 +179,36 @@ derived by hand from the latency/processing/flush constants, timer bookkeeping, 
 identical, exact `format_trace_line` strings, `run_bounded` boundary at exactly N events);
 CLI ctests: `--list`, S1 quiesced, exact final BANK_A line, a specific trace line,
 unknown scenario / bad seed / no args fail. Mutants: 12/12 killed.
+
+## Task 16: S2 and S3 vote-no aborts
+
+Built:
+- `make_s2_buyer_lacks_funds` (BANK_A holds price − 1 cent) and `make_s3_account_frozen`
+  (BANK_B genesis `frozen = true`), registered as S2/S3.
+- `describe_body()` in `protocol/messages`: message trace records now carry a short body
+  summary in `detail` (`YES`, `NO:<REASON>`, `BUYER`/`SELLER`, abort reason, ACK
+  decision, `BUYER<-SELLER` for PROPOSE). Lets tests and the CLI show *why* without
+  decoding bodies.
+
+Decisions:
+- **`freeze_account(n)` is modeled as the genesis frozen flag**, not a runtime script
+  action. Reason: nodes only change state through messages/timers and replay starts from
+  genesis; a runtime toggle would need a durable FROZEN record to survive restart. Simplest
+  option consistent with DESIGN.md §4.1 ("frozen: bool, toggled by scenarios").
+  Follow-up if a mid-run freeze is wanted: add a `SetFrozen` log record + admin message.
+
+Tests (`scenario_vote_no_test`):
+- S2: buyer VOTE `NO:INSUFFICIENT_FUNDS` at 3,200, tombstone only; seller LOCK at 36,100
+  and UNLOCK at 40,300 (it had locked before ABORT arrived); all three ABORTs carry
+  INSUFFICIENT_FUNDS (two broadcast + one reply to the seller's late yes); no COMMIT; no
+  balance moved; invariants.
+- S3: seller VOTE `NO:ACCOUNT_FROZEN`, no lock, tombstone; buyer LOCK 2,100 / UNLOCK
+  74,300; ABORT reason ACCOUNT_FROZEN; ACK at 75,400.
+- Other side of the S2 boundary: buyer with exactly the price commits (cash → 0).
+- Restart after quiescence (crash + restart both banks at 20 s, seeds 1/2/99): same states
+  and ledgers, no recovery errors, no outcome queries.
+- Registry entries change only the intended genesis field.
+- `messages_test`: exact `describe_body` table; COMMIT trace has no detail.
+
+Mutants: 7/7 killed across `scenario_vote_no_test` and `messages_test` (2 only as
+compile-checked table entries).

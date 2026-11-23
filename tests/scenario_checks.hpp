@@ -57,6 +57,51 @@ namespace scenario_checks {
     return out;
 }
 
+// Steps the run until the next event would be at or after `time`.
+inline void run_until(glassbox::ScenarioRun& run, glassbox::SimTimeUs time)
+{
+    while (true) {
+        const auto next = run.simulator().events().peek();
+        if (!next || next->time_us >= time) {
+            return;
+        }
+        CHECK(run.simulator().step());
+    }
+}
+
+// Trace records of `kind` at `node`, rendered "<time> <detail>".
+[[nodiscard]] inline std::vector<std::string> notes(
+    const glassbox::ScenarioRun& run,
+    const std::string& kind,
+    glassbox::NodeId node)
+{
+    std::vector<std::string> out;
+    for (const glassbox::TraceRecord& r : run.trace()) {
+        if (r.kind == kind && r.node == node) {
+            out.push_back(std::to_string(r.sim_time_us) + " " +
+                          r.detail.value_or(""));
+        }
+    }
+    return out;
+}
+
+// Message sends from `node` of `type`, rendered "<time> <detail>".
+[[nodiscard]] inline std::vector<std::string> sends(
+    const glassbox::ScenarioRun& run,
+    glassbox::NodeId node,
+    glassbox::MessageType type)
+{
+    std::vector<std::string> out;
+    for (const glassbox::TraceRecord& r : run.trace()) {
+        if (r.kind == "MSG_SEND" && r.node == node && r.msg_type == type) {
+            out.push_back(std::to_string(r.sim_time_us) + " " +
+                          r.detail.value_or("-") + " ->" +
+                          std::string{glassbox::to_string(*r.to)});
+        }
+    }
+    return out;
+}
+
 // Invariants 2-5 at quiescence: conservation including locked balances,
 // no negative balances / locked <= total, no leaked locks, no
 // INVARIANT_VIOLATION events. Invariant 1 (atomicity) over every trade the

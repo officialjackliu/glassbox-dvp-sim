@@ -700,6 +700,7 @@ TraceRecord Simulator::message_trace(const std::string& kind,
     record.msg_id = message.msg_id;
     record.from = message.from;
     record.to = message.to;
+    record.detail = describe_body(message.body);
     return record;
 }
 

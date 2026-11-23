@@ -244,3 +244,7 @@ add_test(NAME cli_bad_seed COMMAND glassbox-dvp-sim --scenario S1 --seed x1)
 set_tests_properties(cli_bad_seed PROPERTIES WILL_FAIL TRUE)
 add_test(NAME cli_no_args COMMAND glassbox-dvp-sim)
 set_tests_properties(cli_no_args PROPERTIES WILL_FAIL TRUE)
+
+add_executable(scenario_vote_no_test tests/scenario_vote_no_test.cpp)
+target_link_libraries(scenario_vote_no_test PRIVATE glassbox_core)
+add_test(NAME scenario_vote_no_test COMMAND scenario_vote_no_test)

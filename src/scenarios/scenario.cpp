@@ -50,8 +50,10 @@ TimedAction submit(SimTimeUs at, TradeRequest request)
 
 namespace {
 
-constexpr std::array<ScenarioInfo, 1> k_registry{{
+constexpr std::array<ScenarioInfo, 3> k_registry{{
     {"S1", "Happy path", &make_s1_happy_path},
+    {"S2", "Buyer lacks funds", &make_s2_buyer_lacks_funds},
+    {"S3", "Account frozen", &make_s3_account_frozen},
 }};
 
 } // namespace

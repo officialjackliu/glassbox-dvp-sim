@@ -23,6 +23,8 @@ namespace glassbox {
 enum class EventKind : std::uint8_t {
     deliver_message,
     drop_message,
+    flush_log,
+    release_send,
     fire_timer,
     node_crash,
     node_restart,
@@ -73,27 +75,32 @@ constexpr std::string_view to_string(MessageType type) noexcept
     return "UNKNOWN";
 }
 
-struct DeliverMessageEvent {
-    MessageType msg_type;
-    NodeId from;
-    NodeId to;
+struct Message {
+    std::uint64_t msg_id = 0;
+    NodeId from = NodeId::coordinator;
+    NodeId to = NodeId::coordinator;
+    MessageType type = MessageType::prepare;
     std::optional<TradeId> trade_id;
-    std::uint64_t msg_id;
+};
+
+struct DeliverMessageEvent {
+    Message message;
+    NodeId target;
     SimTimeUs sent_at_us;
     SimTimeUs deliver_at_us;
     SimTimeUs simulated_latency_us;
 };
 
 struct DropMessageEvent {
-    MessageType msg_type;
-    NodeId from;
-    NodeId to;
+    Message message;
     DropReason reason;
     SimTimeUs sent_at_us;
     SimTimeUs deliver_at_us;
 };
 
 struct FireTimerEvent {
+    NodeId node;
+    std::uint64_t epoch;
     TimerKind kind;
     std::optional<TradeId> trade_id;
     std::string expected_state;
@@ -107,14 +114,76 @@ struct NodeRestartEvent {
     NodeId node;
 };
 
+struct ScriptSetLink {
+    NodeId from;
+    NodeId to;
+    SimTimeUs base_latency_us;
+    SimTimeUs jitter_us;
+    std::uint32_t drop_probability_ppm;
+};
+
+struct ScriptSetPartition {
+    NodeId a;
+    NodeId b;
+    bool partitioned;
+};
+
+struct ScriptDropNext {
+    NodeId from;
+    NodeId to;
+    std::optional<MessageType> message_type;
+};
+
+struct ScriptCrash {
+    NodeId node;
+};
+
+struct ScriptRestart {
+    NodeId node;
+};
+
+struct ScriptNodeDown {
+    NodeId node;
+};
+
+struct ScriptNodeUp {
+    NodeId node;
+};
+
 struct ScriptActionEvent {
-    std::string name;
+    std::variant<
+        ScriptSetLink,
+        ScriptSetPartition,
+        ScriptDropNext,
+        ScriptCrash,
+        ScriptRestart,
+        ScriptNodeDown,
+        ScriptNodeUp> action;
+};
+
+struct DeferredLogRecord {
+    std::string kind;
+    std::optional<TradeId> trade_id;
+};
+
+struct FlushLogEvent {
+    NodeId node;
+    std::uint64_t epoch;
+    std::vector<DeferredLogRecord> records;
+};
+
+struct ReleaseSendEvent {
+    NodeId node;
+    std::uint64_t epoch;
+    Message send;
 };
 
 using EventPayload = std::variant<
     std::monostate,
     DeliverMessageEvent,
     DropMessageEvent,
+    FlushLogEvent,
+    ReleaseSendEvent,
     FireTimerEvent,
     NodeCrashEvent,
     NodeRestartEvent,

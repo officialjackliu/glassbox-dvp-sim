@@ -263,7 +263,7 @@ int main()
         CHECK(first_event->seq.value() < second_event->seq.value());
         const auto& first_payload =
             std::get<glassbox::DeliverMessageEvent>(first_event->payload);
-        CHECK(first_payload.msg_type == glassbox::MessageType::prepare);
+        CHECK(first_payload.message.type == glassbox::MessageType::prepare);
     }
 
     // All directed defaults come from the DESIGN.md regional placement.
@@ -445,7 +445,7 @@ int main()
             glassbox::NodeId::bank_a,
             glassbox::NodeId::bank_b,
             true);
-        for (const auto pair : std::array<std::pair<glassbox::NodeId,
+        for (const auto& pair : std::array<std::pair<glassbox::NodeId,
                                                    glassbox::NodeId>, 2>{
                  std::pair{glassbox::NodeId::bank_a,
                            glassbox::NodeId::bank_b},
@@ -681,8 +681,8 @@ int main()
             CHECK(event->kind == glassbox::EventKind::drop_message);
             const auto& payload =
                 std::get<glassbox::DropMessageEvent>(event->payload);
-            CHECK(payload.from == glassbox::NodeId::bank_a);
-            CHECK(payload.to == glassbox::NodeId::bank_b);
+            CHECK(payload.message.from == glassbox::NodeId::bank_a);
+            CHECK(payload.message.to == glassbox::NodeId::bank_b);
             CHECK(payload.deliver_at_us >= payload.sent_at_us);
         }
     }
@@ -708,15 +708,15 @@ int main()
         CHECK(event);
         const auto& payload =
             std::get<glassbox::DeliverMessageEvent>(event->payload);
-        CHECK(payload.msg_type == glassbox::MessageType::prepare);
+        CHECK(payload.message.type == glassbox::MessageType::prepare);
         CHECK(payload.sent_at_us == 500);
         CHECK(payload.deliver_at_us ==
               result.deliver_time_us);
         CHECK(payload.simulated_latency_us ==
               payload.deliver_at_us - payload.sent_at_us);
-        CHECK(payload.msg_id == 44);
-        CHECK(payload.trade_id &&
-              payload.trade_id->value() == 10);
+        CHECK(payload.message.msg_id == 44);
+        CHECK(payload.message.trade_id &&
+              payload.message.trade_id->value() == 10);
     }
 
     // Search seeds until jitter reorders two nearby sends.

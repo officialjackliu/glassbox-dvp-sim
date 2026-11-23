@@ -18,15 +18,18 @@ int main()
     const auto first = queue.schedule(
         100,
         glassbox::EventKind::script_action,
-        glassbox::ScriptActionEvent{"first"});
+        glassbox::ScriptActionEvent{
+            glassbox::ScriptNodeUp{glassbox::NodeId::bank_a}});
     const auto second = queue.schedule(
         100,
         glassbox::EventKind::script_action,
-        glassbox::ScriptActionEvent{"second"});
+        glassbox::ScriptActionEvent{
+            glassbox::ScriptNodeUp{glassbox::NodeId::bank_b}});
     const auto earlier = queue.schedule(
         50,
         glassbox::EventKind::script_action,
-        glassbox::ScriptActionEvent{"earlier"});
+        glassbox::ScriptActionEvent{
+            glassbox::ScriptNodeUp{glassbox::NodeId::bank_c}});
 
     CHECK(first && first->value() == 0);
     CHECK(second && second->value() == 1);
@@ -42,17 +45,15 @@ int main()
     CHECK(first_at_equal_time);
     CHECK(first_at_equal_time->time_us == 100);
     CHECK(first_at_equal_time->seq.value() == 0);
-    CHECK(std::get<glassbox::ScriptActionEvent>(
-              first_at_equal_time->payload)
-              .name == "first");
+    CHECK(std::holds_alternative<glassbox::ScriptActionEvent>(
+              first_at_equal_time->payload));
 
     const auto second_at_equal_time = queue.pop();
     CHECK(second_at_equal_time);
     CHECK(second_at_equal_time->time_us == 100);
     CHECK(second_at_equal_time->seq.value() == 1);
-    CHECK(std::get<glassbox::ScriptActionEvent>(
-              second_at_equal_time->payload)
-              .name == "second");
+    CHECK(std::holds_alternative<glassbox::ScriptActionEvent>(
+              second_at_equal_time->payload));
 
     CHECK(queue.empty());
     CHECK(queue.size() == 0);

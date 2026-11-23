@@ -19,7 +19,8 @@ void RunTimedScenario(glassbox::MeasuredNs& measured_ns,
     const auto first = queue.schedule(
         100,
         glassbox::EventKind::script_action,
-        glassbox::ScriptActionEvent{"first"});
+        glassbox::ScriptActionEvent{
+            glassbox::ScriptNodeUp{glassbox::NodeId::bank_a}});
     const auto crash = queue.schedule(
         250,
         glassbox::EventKind::node_crash,
@@ -56,7 +57,8 @@ int main()
     const auto earlier = queue.schedule(
         100,
         glassbox::EventKind::script_action,
-        glassbox::ScriptActionEvent{"past-clock-test"});
+        glassbox::ScriptActionEvent{
+            glassbox::ScriptNodeUp{glassbox::NodeId::bank_a}});
     CHECK(earlier.has_value());
     CHECK(clock.pop_next(queue).has_value());
     CHECK(clock.now_us() == 100);
@@ -64,7 +66,8 @@ int main()
     const auto past = queue.schedule(
         50,
         glassbox::EventKind::script_action,
-        glassbox::ScriptActionEvent{"past"});
+        glassbox::ScriptActionEvent{
+            glassbox::ScriptNodeUp{glassbox::NodeId::bank_a}});
     CHECK(past.has_value());
     bool past_rejected = false;
     try {

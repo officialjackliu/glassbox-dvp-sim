@@ -27,6 +27,12 @@ through its tests and code review.
   values are illustrative placeholders and every directed link is configurable.
   Node-down inbound state is checked when scheduling and must be rechecked
   by the future simulator loop when a deliver event is popped.
+- `include/sim/effects.hpp` and `include/sim/node.hpp` define the pure node
+  interface and Effects batch. Nodes receive input and virtual time only and
+  return logs, sends, timers, and trace notes.
+- `include/sim/simulator.hpp` and `src/simulator.cpp` provide the single-threaded
+  event loop, epoch invalidation, deferred log/send timers, node registry,
+  scripted actions, and minimal trace sink.
 - `src/main.cpp` is the integration smoke executable. It constructs core values,
   schedules two events, steps them through virtual time, and emits a synthetic
   trace line.

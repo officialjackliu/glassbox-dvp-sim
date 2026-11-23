@@ -7,6 +7,7 @@
 #include <map>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace glassbox {
@@ -23,6 +24,34 @@ enum class ReplayErrorKind : std::uint8_t {
     decision_without_proposed,
     end_before_decision,
 };
+
+[[nodiscard]] constexpr std::string_view to_string(
+    ReplayErrorKind kind) noexcept
+{
+    switch (kind) {
+    case ReplayErrorKind::committed_without_prepared:
+        return "COMMITTED_WITHOUT_PREPARED";
+    case ReplayErrorKind::prepared_twice:
+        return "PREPARED_TWICE";
+    case ReplayErrorKind::record_after_final:
+        return "RECORD_AFTER_FINAL";
+    case ReplayErrorKind::prepared_wrong_party:
+        return "PREPARED_WRONG_PARTY";
+    case ReplayErrorKind::ledger_op_failed:
+        return "LEDGER_OP_FAILED";
+    case ReplayErrorKind::coordinator_record_in_participant:
+        return "COORDINATOR_RECORD_IN_PARTICIPANT";
+    case ReplayErrorKind::participant_record_in_coordinator:
+        return "PARTICIPANT_RECORD_IN_COORDINATOR";
+    case ReplayErrorKind::two_decisions:
+        return "TWO_DECISIONS";
+    case ReplayErrorKind::decision_without_proposed:
+        return "DECISION_WITHOUT_PROPOSED";
+    case ReplayErrorKind::end_before_decision:
+        return "END_BEFORE_DECISION";
+    }
+    return "UNKNOWN";
+}
 
 struct ReplayError {
     ReplayErrorKind kind;

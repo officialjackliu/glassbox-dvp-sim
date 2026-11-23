@@ -39,6 +39,7 @@ add_executable(glassbox-dvp-sim
     src/domain/durable_log.cpp
     src/domain/replay.cpp
     src/protocol/messages.cpp
+    src/protocol/coordinator.cpp
 )
 
 target_include_directories(glassbox-dvp-sim PRIVATE include)
@@ -170,3 +171,16 @@ add_executable(messages_test
 )
 target_include_directories(messages_test PRIVATE include)
 add_test(NAME messages_test COMMAND messages_test)
+
+add_executable(coordinator_test
+    src/simulator.cpp
+    src/domain/local_ledger.cpp
+    src/domain/trade.cpp
+    src/domain/durable_log.cpp
+    src/domain/replay.cpp
+    src/protocol/messages.cpp
+    src/protocol/coordinator.cpp
+    tests/coordinator_test.cpp
+)
+target_include_directories(coordinator_test PRIVATE include)
+add_test(NAME coordinator_test COMMAND coordinator_test)

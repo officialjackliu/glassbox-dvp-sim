@@ -14,6 +14,7 @@ int main()
         "include/domain/durable_log.hpp",
         "include/domain/replay.hpp",
         "include/protocol/messages.hpp",
+        "include/protocol/coordinator.hpp",
     };
     for (const char* file : files) {
         std::ifstream input{file};

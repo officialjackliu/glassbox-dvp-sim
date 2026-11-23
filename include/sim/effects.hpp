@@ -26,9 +26,14 @@ struct TimerRequest {
     std::uint32_t attempt = 0;
 };
 
+// Extra trace detail a node attaches to a batch (STATE_CHANGE, LOCK, UNLOCK,
+// APPLY, REJECTED, INVARIANT_VIOLATION, ...). The simulator emits it; the node
+// never writes to the trace itself.
 struct TraceNote {
     std::string kind;
     std::string detail;
+    std::optional<TradeId> trade_id = std::nullopt;
+    std::string handler = "NodeEffect";
 };
 
 struct Effects {

@@ -28,6 +28,16 @@ class Node {
                                            SimTimeUs now) = 0;
     [[nodiscard]] virtual TradeState trade_state(
         TradeId trade_id) const = 0;
+    // Called by the simulator after a record from this node becomes durable
+    // (same epoch, node up). Pure state update: it returns no Effects, so the
+    // write-ahead structure of Effects batches is unchanged. Protocol nodes
+    // use it so they never announce a promise (a yes vote, a decision) before
+    // the record behind it is durable.
+    virtual void on_log_durable(const LogRecord& record, SimTimeUs now)
+    {
+        static_cast<void>(record);
+        static_cast<void>(now);
+    }
     virtual void on_crash() = 0;
     [[nodiscard]] virtual Effects on_restart(
         std::span<const LogEntry> durable_log,

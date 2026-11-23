@@ -8,6 +8,8 @@
 
 #include "sim/core_types.hpp"
 #include "domain/log_records.hpp"
+#include "domain/trade.hpp"
+#include "protocol/messages.hpp"
 
 #include <cstdint>
 #include <limits>
@@ -45,44 +47,33 @@ enum class DropReason : std::uint8_t {
     next_message,
 };
 
-enum class MessageType : std::uint8_t {
-    propose,
-    prepare,
-    vote,
-    commit,
-    abort,
-    ack,
-    outcome_query,
-};
-
-constexpr std::string_view to_string(MessageType type) noexcept
+[[nodiscard]] constexpr std::string_view to_string(TimerKind kind) noexcept
 {
-    switch (type) {
-    case MessageType::propose:
-        return "PROPOSE";
-    case MessageType::prepare:
-        return "PREPARE";
-    case MessageType::vote:
-        return "VOTE";
-    case MessageType::commit:
-        return "COMMIT";
-    case MessageType::abort:
-        return "ABORT";
-    case MessageType::ack:
-        return "ACK";
-    case MessageType::outcome_query:
-        return "OUTCOME_QUERY";
+    switch (kind) {
+    case TimerKind::vote_timeout:
+        return "VOTE_TIMEOUT";
+    case TimerKind::retransmit:
+        return "RETRANSMIT";
+    case TimerKind::decision_wait:
+        return "DECISION_WAIT";
     }
     return "UNKNOWN";
 }
 
-struct Message {
-    std::uint64_t msg_id = 0;
-    NodeId from = NodeId::coordinator;
-    NodeId to = NodeId::coordinator;
-    MessageType type = MessageType::prepare;
-    std::optional<TradeId> trade_id;
-};
+[[nodiscard]] constexpr std::string_view to_string(DropReason reason) noexcept
+{
+    switch (reason) {
+    case DropReason::random:
+        return "DROP_RANDOM";
+    case DropReason::partition:
+        return "PARTITION";
+    case DropReason::node_down:
+        return "NODE_DOWN";
+    case DropReason::next_message:
+        return "DROP_NEXT";
+    }
+    return "UNKNOWN";
+}
 
 struct DeliverMessageEvent {
     Message message;
@@ -152,6 +143,12 @@ struct ScriptNodeUp {
     NodeId node;
 };
 
+// Client submission of a PROPOSE. Delivered directly to the coordinator at the
+// scripted time (the client is co-located), so it consumes no RNG draws.
+struct ScriptSubmitTrade {
+    TradeRequest request;
+};
+
 struct ScriptActionEvent {
     std::variant<
         ScriptSetLink,
@@ -160,7 +157,8 @@ struct ScriptActionEvent {
         ScriptCrash,
         ScriptRestart,
         ScriptNodeDown,
-        ScriptNodeUp> action;
+        ScriptNodeUp,
+        ScriptSubmitTrade> action;
 };
 
 struct FlushLogEvent {

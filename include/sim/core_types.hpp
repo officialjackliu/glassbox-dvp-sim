@@ -42,6 +42,55 @@ enum class TradeState : std::uint8_t {
     aborted,
 };
 
+// Wire/trace spelling of reason codes (DESIGN.md section 5.1).
+[[nodiscard]] constexpr std::string_view to_string(ReasonCode reason) noexcept
+{
+    switch (reason) {
+    case ReasonCode::none:
+        return "NONE";
+    case ReasonCode::insufficient_funds:
+        return "INSUFFICIENT_FUNDS";
+    case ReasonCode::insufficient_bonds:
+        return "INSUFFICIENT_BONDS";
+    case ReasonCode::account_frozen:
+        return "ACCOUNT_FROZEN";
+    case ReasonCode::expired:
+        return "EXPIRED";
+    case ReasonCode::vote_timeout:
+        return "VOTE_TIMEOUT";
+    case ReasonCode::already_aborted:
+        return "ALREADY_ABORTED";
+    case ReasonCode::unknown_trade:
+        return "UNKNOWN_TRADE";
+    }
+    return "UNKNOWN";
+}
+
+[[nodiscard]] constexpr std::string_view to_string(TradeState state) noexcept
+{
+    switch (state) {
+    case TradeState::none:
+        return "NONE";
+    case TradeState::collecting:
+        return "COLLECTING";
+    case TradeState::committing:
+        return "COMMITTING";
+    case TradeState::aborting:
+        return "ABORTING";
+    case TradeState::done:
+        return "DONE";
+    case TradeState::preparing:
+        return "PREPARING";
+    case TradeState::prepared:
+        return "PREPARED";
+    case TradeState::committed:
+        return "COMMITTED";
+    case TradeState::aborted:
+        return "ABORTED";
+    }
+    return "UNKNOWN";
+}
+
 enum class NodeId : std::uint8_t {
     coordinator,
     bank_a,

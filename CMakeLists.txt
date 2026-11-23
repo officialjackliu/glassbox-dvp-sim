@@ -38,6 +38,7 @@ add_executable(glassbox-dvp-sim
     src/domain/trade.cpp
     src/domain/durable_log.cpp
     src/domain/replay.cpp
+    src/protocol/messages.cpp
 )
 
 target_include_directories(glassbox-dvp-sim PRIVATE include)
@@ -88,6 +89,7 @@ add_executable(simulator_test
     src/domain/trade.cpp
     src/domain/durable_log.cpp
     src/domain/replay.cpp
+    src/protocol/messages.cpp
     tests/simulator_test.cpp
 )
 
@@ -156,3 +158,15 @@ add_test(NAME replay_test COMMAND replay_test)
 set_tests_properties(replay_test PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+add_executable(messages_test
+    src/simulator.cpp
+    src/domain/local_ledger.cpp
+    src/domain/trade.cpp
+    src/domain/durable_log.cpp
+    src/domain/replay.cpp
+    src/protocol/messages.cpp
+    tests/messages_test.cpp
+)
+target_include_directories(messages_test PRIVATE include)
+add_test(NAME messages_test COMMAND messages_test)

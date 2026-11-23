@@ -84,6 +84,11 @@ class Simulator {
         SimTimeUs send_time,
         std::optional<TradeId> trade_id = std::nullopt);
 
+    // Sends a complete message (with body) through the network model.
+    [[nodiscard]] std::optional<SequenceId> schedule_message(
+        Message message,
+        SimTimeUs send_time);
+
     // Applies one Effects batch structurally:
     // 1. logs become durable at now + log_flush_delay_us;
     // 2. sends are released at now + processing_delay_us
@@ -124,6 +129,17 @@ class Simulator {
                           SequenceId seq);
     void dispatch_script(const ScriptActionEvent& payload,
                          SequenceId seq);
+    void deliver_to_node(NodeId target,
+                         const Message& message,
+                         SequenceId seq);
+    [[nodiscard]] std::uint64_t next_msg_id() noexcept;
+
+    void emit(TraceRecord record);
+    [[nodiscard]] TraceRecord message_trace(
+        const std::string& kind,
+        const std::string& handler,
+        NodeId node,
+        const Message& message) const;
 
     void emit_trace(SequenceId seq,
                     SimTimeUs now,
@@ -145,6 +161,7 @@ class Simulator {
     std::array<std::uint64_t, k_node_count> epochs_{};
     std::array<DurableLog, k_node_count> durable_logs_{};
     std::uint64_t trace_seq_ = 0;
+    std::uint64_t next_msg_id_ = 1;
 };
 
 } // namespace glassbox

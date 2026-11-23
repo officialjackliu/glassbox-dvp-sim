@@ -104,20 +104,32 @@ std::optional<SequenceId> Simulator::schedule_message(
     SimTimeUs send_time,
     std::optional<TradeId> trade_id)
 {
+    return schedule_message(
+        Message{
+            msg_id,
+            from,
+            to,
+            type,
+            trade_id,
+            std::monostate{},
+        },
+        send_time);
+}
+
+std::optional<SequenceId> Simulator::schedule_message(
+    Message message,
+    SimTimeUs send_time)
+{
     if (send_time < clock_.now_us()) {
         return std::nullopt;
     }
-    if (!node_up(from)) {
+    if (!node_up(message.from)) {
         return std::nullopt;
     }
     return network_.schedule_delivery(
         queue_,
         send_time,
-        from,
-        to,
-        type,
-        msg_id,
-        trade_id).event_seq;
+        std::move(message)).event_seq;
 }
 
 std::optional<MeasuredNs> Simulator::apply_effects(
@@ -233,12 +245,14 @@ std::optional<MeasuredNs> Simulator::apply_effects(
                 timer.attempt,
             });
         if (scheduled_timer.status == ScheduleStatus::scheduled) {
-            emit_trace(
-                scheduled_timer.seq.value_or(SequenceId{0}),
-                now,
-                "TIMER_SET",
-                "Effects::timer",
-                0);
+            TraceRecord record;
+            record.sim_time_us = now;
+            record.kind = "TIMER_SET";
+            record.handler = "Effects::timer";
+            record.node = source;
+            record.trade_id = timer.trade_id;
+            record.detail = std::string{to_string(timer.kind)};
+            emit(std::move(record));
         } else {
             emit_trace(
                 SequenceId{0},
@@ -253,12 +267,16 @@ std::optional<MeasuredNs> Simulator::apply_effects(
     }
 
     for (TraceNote& note : effects.notes) {
-        emit_trace(
-            SequenceId{0},
-            now,
-            note.kind,
-            "NodeEffect",
-            0);
+        TraceRecord record;
+        record.sim_time_us = now;
+        record.kind = std::move(note.kind);
+        record.handler = std::move(note.handler);
+        record.node = source;
+        record.trade_id = note.trade_id;
+        if (!note.detail.empty()) {
+            record.detail = std::move(note.detail);
+        }
+        emit(std::move(record));
     }
     return 0;
 }
@@ -282,12 +300,13 @@ void Simulator::crash_node(NodeId node)
             static_cast<MeasuredNs>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     finish - start).count());
-        emit_trace(
-            SequenceId{0},
-            clock_.now_us(),
-            "CRASH",
-            "Node::on_crash",
-            measured);
+        TraceRecord record;
+        record.sim_time_us = clock_.now_us();
+        record.kind = "CRASH";
+        record.handler = "Node::on_crash";
+        record.measured_ns = measured;
+        record.node = node;
+        emit(std::move(record));
     }
 }
 
@@ -313,12 +332,13 @@ void Simulator::restart_node(NodeId node)
         static_cast<MeasuredNs>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 finish - start).count());
-    emit_trace(
-        SequenceId{0},
-        clock_.now_us(),
-        "RESTART",
-        "Node::on_restart",
-        measured);
+    TraceRecord record;
+    record.sim_time_us = clock_.now_us();
+    record.kind = "RESTART";
+    record.handler = "Node::on_restart";
+    record.measured_ns = measured;
+    record.node = node;
+    emit(std::move(record));
     static_cast<void>(apply_effects(node, std::move(effects),
                                     clock_.now_us()));
 }
@@ -387,43 +407,47 @@ void Simulator::dispatch(const Event& event)
 void Simulator::dispatch_deliver(const DeliverMessageEvent& payload,
                                  SequenceId seq)
 {
-    if (!node_up(payload.target)) {
-        emit_trace(
-            seq,
-            clock_.now_us(),
-            "MSG_DROP_NODE_DOWN",
-            "NetworkArrival",
-            0);
+    deliver_to_node(payload.target, payload.message, seq);
+}
+
+void Simulator::deliver_to_node(NodeId target,
+                                const Message& message,
+                                SequenceId seq)
+{
+    static_cast<void>(seq);
+    if (!node_up(target)) {
+        emit(message_trace("MSG_DROP_NODE_DOWN",
+                           "NetworkArrival",
+                           target,
+                           message));
         return;
     }
 
-    Node* implementation = nodes_[node_index(payload.target)].get();
+    Node* implementation = nodes_[node_index(target)].get();
     if (!implementation) {
-        emit_trace(
-            seq,
-            clock_.now_us(),
-            "MSG_DROP_NO_NODE",
-            "NetworkArrival",
-            0);
+        emit(message_trace("MSG_DROP_NO_NODE",
+                           "NetworkArrival",
+                           target,
+                           message));
         return;
     }
 
     const auto start = std::chrono::steady_clock::now();
     Effects effects =
-        implementation->on_message(payload.message, clock_.now_us());
+        implementation->on_message(message, clock_.now_us());
     const auto finish = std::chrono::steady_clock::now();
     const MeasuredNs measured =
         static_cast<MeasuredNs>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 finish - start).count());
-    emit_trace(
-        seq,
-        clock_.now_us(),
-        "MSG_DELIVER",
-        "Node::on_message",
-        measured);
+    TraceRecord record = message_trace("MSG_DELIVER",
+                                       "Node::on_message",
+                                       target,
+                                       message);
+    record.measured_ns = measured;
+    emit(std::move(record));
     static_cast<void>(apply_effects(
-        payload.target,
+        target,
         std::move(effects),
         clock_.now_us()));
 }
@@ -431,13 +455,13 @@ void Simulator::dispatch_deliver(const DeliverMessageEvent& payload,
 void Simulator::dispatch_drop(const DropMessageEvent& payload,
                               SequenceId seq)
 {
-    static_cast<void>(payload);
-    emit_trace(
-        seq,
-        clock_.now_us(),
-        "MSG_DROP",
-        "NetworkModel",
-        0);
+    static_cast<void>(seq);
+    TraceRecord record = message_trace("MSG_DROP",
+                                       "NetworkModel",
+                                       payload.message.to,
+                                       payload.message);
+    record.reason = std::string{to_string(payload.reason)};
+    emit(std::move(record));
 }
 
 void Simulator::dispatch_flush(const FlushLogEvent& payload,
@@ -448,19 +472,26 @@ void Simulator::dispatch_flush(const FlushLogEvent& payload,
         epochs_[index] != payload.epoch) {
         return;
     }
+    static_cast<void>(seq);
     DurableLog& log = durable_logs_[index];
+    Node* implementation = nodes_[index].get();
     for (const LogRecord& record : payload.records) {
         const auto entry =
             log.append(record, clock_.now_us());
         if (!entry) {
             continue;
         }
-        emit_trace(
-            seq,
-            clock_.now_us(),
-            "LOG_APPEND",
-            "Effects::flush",
-            0);
+        TraceRecord trace;
+        trace.sim_time_us = clock_.now_us();
+        trace.kind = "LOG_APPEND";
+        trace.handler = "Effects::flush";
+        trace.node = payload.node;
+        trace.trade_id = record_trade_id(record);
+        trace.log_record = std::string{record_kind(record)};
+        emit(std::move(trace));
+        if (implementation) {
+            implementation->on_log_durable(record, clock_.now_us());
+        }
     }
 }
 
@@ -472,43 +503,45 @@ void Simulator::dispatch_release(const ReleaseSendEvent& payload,
         epochs_[index] != payload.epoch) {
         return;
     }
+    static_cast<void>(seq);
+    Message message = payload.send;
+    message.from = payload.node;
+    if (message.msg_id == 0) {
+        message.msg_id = next_msg_id();
+    }
+    TraceRecord record = message_trace("MSG_SEND",
+                                       "Effects::release",
+                                       payload.node,
+                                       message);
     static_cast<void>(schedule_message(
-        payload.node,
-        payload.send.to,
-        payload.send.type,
-        payload.send.msg_id,
-        clock_.now_us(),
-        payload.send.trade_id));
-    emit_trace(
-        seq,
-        clock_.now_us(),
-        "MSG_SEND",
-        "Effects::release",
-        0);
+        std::move(message),
+        clock_.now_us()));
+    emit(std::move(record));
 }
 
 void Simulator::dispatch_timer(const FireTimerEvent& payload,
                                SequenceId seq)
 {
+    static_cast<void>(seq);
+    const auto timer_trace =
+        [&](const char* kind, std::optional<std::string> reason) {
+            TraceRecord record;
+            record.sim_time_us = clock_.now_us();
+            record.kind = kind;
+            record.handler = "Simulator::dispatch_timer";
+            record.reason = std::move(reason);
+            record.node = payload.node;
+            record.trade_id = payload.trade_id;
+            record.detail = std::string{to_string(payload.kind)};
+            return record;
+        };
     const std::size_t index = node_index(payload.node);
     if (!node_up_[index]) {
-        emit_trace(
-            seq,
-            clock_.now_us(),
-            "TIMER_IGNORED",
-            "Simulator::dispatch_timer",
-            0,
-            "node_down");
+        emit(timer_trace("TIMER_IGNORED", "node_down"));
         return;
     }
     if (epochs_[index] != payload.epoch) {
-        emit_trace(
-            seq,
-            clock_.now_us(),
-            "TIMER_IGNORED",
-            "Simulator::dispatch_timer",
-            0,
-            "stale_epoch");
+        emit(timer_trace("TIMER_IGNORED", "stale_epoch"));
         return;
     }
     Node* implementation = nodes_[index].get();
@@ -518,13 +551,7 @@ void Simulator::dispatch_timer(const FireTimerEvent& payload,
     if (payload.trade_id &&
         implementation->trade_state(*payload.trade_id) !=
             payload.expected_state) {
-        emit_trace(
-            seq,
-            clock_.now_us(),
-            "TIMER_IGNORED",
-            "Simulator::dispatch_timer",
-            0,
-            "state_mismatch");
+        emit(timer_trace("TIMER_IGNORED", "state_mismatch"));
         return;
     }
     TimerEvent timer{
@@ -543,12 +570,10 @@ void Simulator::dispatch_timer(const FireTimerEvent& payload,
         static_cast<MeasuredNs>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 finish - start).count());
-    emit_trace(
-        seq,
-        clock_.now_us(),
-        "TIMER_FIRE",
-        "Node::on_timer",
-        measured);
+    TraceRecord record = timer_trace("TIMER_FIRE", std::nullopt);
+    record.handler = "Node::on_timer";
+    record.measured_ns = measured;
+    emit(std::move(record));
     static_cast<void>(apply_effects(
         payload.node,
         std::move(effects),
@@ -611,6 +636,14 @@ void Simulator::dispatch_script(const ScriptActionEvent& payload,
         "SCRIPT_ACTION",
         "Simulator::dispatch_script",
         0);
+    // A submitted trade is delivered after the SCRIPT_ACTION record so the
+    // trace reads "client submits" -> "coordinator receives PROPOSE".
+    if (const auto* submit =
+            std::get_if<ScriptSubmitTrade>(&payload.action)) {
+        Message propose = make_propose(submit->request);
+        propose.msg_id = next_msg_id();
+        deliver_to_node(NodeId::coordinator, propose, seq);
+    }
 }
 
 void Simulator::emit_trace(SequenceId seq,
@@ -621,16 +654,43 @@ void Simulator::emit_trace(SequenceId seq,
                           std::optional<std::string> reason)
 {
     static_cast<void>(seq);
+    TraceRecord record;
+    record.sim_time_us = now;
+    record.kind = kind;
+    record.handler = handler;
+    record.measured_ns = measured_ns;
+    record.reason = std::move(reason);
+    emit(std::move(record));
+}
+
+void Simulator::emit(TraceRecord record)
+{
     ++trace_seq_;
-    trace_sink_.write(
-        TraceRecord{
-            trace_seq_,
-            now,
-            kind,
-            handler,
-            measured_ns,
-            reason,
-        });
+    record.seq = trace_seq_;
+    trace_sink_.write(record);
+}
+
+TraceRecord Simulator::message_trace(const std::string& kind,
+                                     const std::string& handler,
+                                     NodeId node,
+                                     const Message& message) const
+{
+    TraceRecord record;
+    record.sim_time_us = clock_.now_us();
+    record.kind = kind;
+    record.handler = handler;
+    record.node = node;
+    record.trade_id = message.trade_id;
+    record.msg_type = message.type;
+    record.msg_id = message.msg_id;
+    record.from = message.from;
+    record.to = message.to;
+    return record;
+}
+
+std::uint64_t Simulator::next_msg_id() noexcept
+{
+    return next_msg_id_++;
 }
 
 std::size_t Simulator::node_index(NodeId node) noexcept

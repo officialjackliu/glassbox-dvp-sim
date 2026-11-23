@@ -12,6 +12,8 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace glassbox {
@@ -156,12 +158,34 @@ class NetworkModel {
         std::uint64_t msg_id = 0,
         std::optional<TradeId> trade_id = std::nullopt)
     {
+        return schedule_delivery(
+            queue,
+            send_time_us,
+            Message{
+                msg_id,
+                from,
+                to,
+                message_type,
+                trade_id,
+                std::monostate{},
+            });
+    }
+
+    // Full-message overload: the body travels with the message unchanged.
+    // Draw order is identical to the field overload (one jitter + one drop).
+    [[nodiscard]] NetworkScheduleResult schedule_delivery(
+        EventQueue& queue,
+        SimTimeUs send_time_us,
+        Message message)
+    {
         if (send_time_us < 0) {
             return {NetworkScheduleStatus::invalid_send_time,
                     false, std::nullopt, std::nullopt,
                     send_time_us, 0};
         }
 
+        const NodeId from = message.from;
+        const NodeId to = message.to;
         const LinkConfig& config = link(from, to);
         const DeterministicNetworkDraw random_draw =
             draw_network_delivery(
@@ -188,7 +212,7 @@ class NetworkModel {
                 const NextDrop& next = next_drops_[i];
                 if (next.from == from && next.to == to &&
                     (!next.message_type ||
-                     *next.message_type == message_type)) {
+                     *next.message_type == message.type)) {
                     next_drops_.erase(next_drops_.begin() +
                                       static_cast<std::ptrdiff_t>(i));
                     reason = DropReason::next_message;
@@ -206,13 +230,7 @@ class NetworkModel {
                 *deliver_at,
                 EventKind::drop_message,
                 DropMessageEvent{
-                    Message{
-                        msg_id,
-                        from,
-                        to,
-                        message_type,
-                        trade_id,
-                    },
+                    message,
                     *reason,
                     send_time_us,
                     *deliver_at,
@@ -226,13 +244,7 @@ class NetworkModel {
             *deliver_at,
             EventKind::deliver_message,
             DeliverMessageEvent{
-                Message{
-                    msg_id,
-                    from,
-                    to,
-                    message_type,
-                    trade_id,
-                },
+                std::move(message),
                 to,
                 send_time_us,
                 *deliver_at,

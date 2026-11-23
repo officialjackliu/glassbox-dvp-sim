@@ -15,6 +15,7 @@ int main()
         "include/domain/replay.hpp",
         "include/protocol/messages.hpp",
         "include/protocol/coordinator.hpp",
+        "include/protocol/participant.hpp",
     };
     for (const char* file : files) {
         std::ifstream input{file};

@@ -24,7 +24,9 @@ class Node {
     [[nodiscard]] virtual Effects on_timer(const TimerEvent& event,
                                            SimTimeUs now) = 0;
     virtual void on_crash() = 0;
-    [[nodiscard]] virtual Effects on_restart(SimTimeUs now) = 0;
+    [[nodiscard]] virtual Effects on_restart(
+        const std::vector<LogRecord>& durable_log,
+        SimTimeUs now) = 0;
 };
 
 } // namespace glassbox

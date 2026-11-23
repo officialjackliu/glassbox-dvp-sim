@@ -445,7 +445,7 @@ int main()
             glassbox::NodeId::bank_a,
             glassbox::NodeId::bank_b,
             true);
-        for (const auto pair : std::array<std::pair<glassbox::NodeId,
+        for (const auto& pair : std::array<std::pair<glassbox::NodeId,
                                                    glassbox::NodeId>, 2>{
                  std::pair{glassbox::NodeId::bank_a,
                            glassbox::NodeId::bank_b},

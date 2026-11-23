@@ -3,6 +3,7 @@
 
 #include <array>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -40,6 +41,13 @@ class DummyNode : public glassbox::Node {
                         glassbox::MessageType::prepare,
                         std::nullopt,
                     }});
+            effects.timers.push_back(
+                glassbox::TimerRequest{
+                    1'500,
+                    glassbox::TimerKind::retransmit,
+                    std::nullopt,
+                    "AFTER_RESTART",
+                });
         }
         if (produce_timer) {
             effects.timers.push_back(
@@ -66,10 +74,36 @@ class DummyNode : public glassbox::Node {
         volatile_state = false;
     }
 
-    glassbox::Effects on_restart(glassbox::SimTimeUs) override
+    glassbox::Effects on_restart(
+        const std::vector<glassbox::LogRecord>& durable_log,
+        glassbox::SimTimeUs) override
     {
         ++restart_calls;
+        restart_log_count =
+            static_cast<int>(durable_log.size());
         volatile_state = true;
+        if (produce_restart_effect) {
+            glassbox::Effects effects;
+            effects.logs.push_back(
+                glassbox::LogRecord{"RESTART_RECORD", std::nullopt});
+            effects.sends.push_back(
+                glassbox::Outgoing{
+                    glassbox::Message{
+                        100,
+                        owner,
+                        destination,
+                        glassbox::MessageType::prepare,
+                        std::nullopt,
+                    }});
+            effects.timers.push_back(
+                glassbox::TimerRequest{
+                    1'500,
+                    glassbox::TimerKind::retransmit,
+                    std::nullopt,
+                    "AFTER_RESTART",
+                });
+            return effects;
+        }
         return {};
     }
 
@@ -86,6 +120,8 @@ class DummyNode : public glassbox::Node {
     int timer_calls = 0;
     int crash_calls = 0;
     int restart_calls = 0;
+    int restart_log_count = 0;
+    bool produce_restart_effect = false;
 };
 
 [[nodiscard]] std::string trace_signature(
@@ -146,6 +182,21 @@ void run_dummy(std::vector<glassbox::TraceRecord>& out)
 
 int main()
 {
+    // Invalid delay configuration is rejected.
+    {
+        CollectorSink sink;
+        glassbox::SimulatorConfig config;
+        config.processing_delay_us = -1;
+        bool rejected = false;
+        try {
+            glassbox::Simulator simulator{config, sink};
+            static_cast<void>(simulator);
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        CHECK(rejected);
+    }
+
     // Effect timing: no logs adds processing only; logs add flush.
     {
         CollectorSink sink;
@@ -314,6 +365,109 @@ int main()
         CHECK(raw->restart_calls == 1);
     }
 
+    // Crash and restart discard stale sends; restart effects are applied.
+    {
+        CollectorSink sink;
+        glassbox::SimulatorConfig config;
+        config.processing_delay_us = 100;
+        config.log_flush_delay_us = 1'000;
+        glassbox::Simulator simulator{config, sink};
+        auto dummy = std::make_unique<DummyNode>();
+        DummyNode* raw = dummy.get();
+        raw->owner = glassbox::NodeId::bank_a;
+        raw->destination = glassbox::NodeId::bank_b;
+        raw->produce_log = true;
+        raw->produce_send = true;
+        raw->produce_restart_effect = false;
+        raw->timer_time = 2'000;
+        simulator.set_node(glassbox::NodeId::bank_a,
+                           std::move(dummy));
+
+        glassbox::Effects effects;
+        effects.logs.push_back(
+            glassbox::LogRecord{"BEFORE_CRASH", std::nullopt});
+        effects.sends.push_back(
+            glassbox::Outgoing{
+                glassbox::Message{
+                    77,
+                    glassbox::NodeId::bank_a,
+                    glassbox::NodeId::bank_b,
+                    glassbox::MessageType::prepare,
+                    std::nullopt,
+                }});
+        effects.timers.push_back(
+            glassbox::TimerRequest{
+                1'500,
+                glassbox::TimerKind::retransmit,
+                std::nullopt,
+                "OLD_EPOCH",
+            });
+        CHECK(simulator.apply_effects(
+                  glassbox::NodeId::bank_a,
+                  effects,
+                  0).has_value());
+
+        simulator.crash_node(glassbox::NodeId::bank_a);
+        const std::size_t crash_epoch =
+            simulator.epoch(glassbox::NodeId::bank_a);
+        CHECK(crash_epoch == 1);
+        simulator.crash_node(glassbox::NodeId::bank_a);
+        CHECK(simulator.epoch(glassbox::NodeId::bank_a) ==
+              crash_epoch);
+        CHECK(raw->crash_calls == 1);
+
+        simulator.restart_node(glassbox::NodeId::bank_a);
+        simulator.restart_node(glassbox::NodeId::bank_a);
+        CHECK(raw->restart_calls == 1);
+        CHECK(raw->restart_log_count == 0);
+
+        simulator.run();
+        bool stale_send = false;
+        for (const glassbox::TraceRecord& record : sink.records) {
+            if (record.kind == "MSG_SEND") {
+                stale_send = true;
+            }
+        }
+        CHECK(!stale_send);
+    }
+
+    // Restart Effects are applied after a real crash.
+    {
+        CollectorSink sink;
+        glassbox::SimulatorConfig config;
+        glassbox::Simulator simulator{config, sink};
+        auto dummy = std::make_unique<DummyNode>();
+        DummyNode* raw = dummy.get();
+        raw->owner = glassbox::NodeId::bank_a;
+        raw->destination = glassbox::NodeId::bank_b;
+        raw->produce_restart_effect = true;
+        simulator.set_node(glassbox::NodeId::bank_a,
+                           std::move(dummy));
+
+        simulator.crash_node(glassbox::NodeId::bank_a);
+        simulator.restart_node(glassbox::NodeId::bank_a);
+        simulator.run();
+
+        CHECK(raw->restart_calls == 1);
+        bool restart_log = false;
+        bool restart_send = false;
+        bool restart_timer = false;
+        for (const glassbox::TraceRecord& record : sink.records) {
+            if (record.kind == "LOG_APPEND") {
+                restart_log = true;
+            }
+            if (record.kind == "MSG_SEND") {
+                restart_send = true;
+            }
+            if (record.kind == "TIMER_FIRE") {
+                restart_timer = true;
+            }
+        }
+        CHECK(restart_log);
+        CHECK(restart_send);
+        CHECK(restart_timer);
+    }
+
     // Down node outputs are suppressed.
     {
         CollectorSink sink;
@@ -373,6 +527,38 @@ int main()
             }
         }
         CHECK(arrival_drop);
+    }
+
+    // Crash target after send: in-flight delivery is dropped, handler not called.
+    {
+        CollectorSink sink;
+        glassbox::SimulatorConfig config;
+        glassbox::Simulator simulator{config, sink};
+        auto dummy = std::make_unique<DummyNode>();
+        DummyNode* raw = dummy.get();
+        simulator.set_node(glassbox::NodeId::bank_c,
+                           std::move(dummy));
+        simulator.network().set_link(
+            glassbox::NodeId::bank_a,
+            glassbox::NodeId::bank_c,
+            glassbox::LinkConfig{100, 0, 0});
+
+        CHECK(simulator.schedule_message(
+                  glassbox::NodeId::bank_a,
+                  glassbox::NodeId::bank_c,
+                  glassbox::MessageType::prepare,
+                  1,
+                  0).has_value());
+        CHECK(simulator.schedule_script(
+                  50,
+                  glassbox::ScriptActionEvent{
+                      glassbox::ScriptCrash{
+                          glassbox::NodeId::bank_c,
+                      },
+                  }).has_value());
+        simulator.run();
+        CHECK(raw->message_calls == 0);
+        CHECK(raw->crash_calls == 1);
     }
 
     // Script actions apply in virtual-time order.

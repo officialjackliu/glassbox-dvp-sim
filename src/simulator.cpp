@@ -15,6 +15,11 @@ Simulator::Simulator(const SimulatorConfig& config, TraceSink& trace_sink)
       rng_(config.seed),
       network_(rng_)
 {
+    if (config.processing_delay_us < 0 ||
+        config.log_flush_delay_us < 0) {
+        throw std::invalid_argument(
+            "processing and log flush delays must be non-negative");
+    }
     node_up_.fill(true);
     epochs_.fill(0);
 }
@@ -60,22 +65,29 @@ SimTimeUs Simulator::now_us() const noexcept
     return clock_.now_us();
 }
 
-std::optional<SequenceId> Simulator::schedule_at(
+ScheduleResult Simulator::schedule_at(
     SimTimeUs time,
     EventKind kind,
     EventPayload payload)
 {
     if (time < clock_.now_us()) {
-        return std::nullopt;
+        return {ScheduleStatus::past_time, std::nullopt};
     }
-    return queue_.schedule(time, kind, std::move(payload));
+    const auto seq = queue_.schedule(time, kind, std::move(payload));
+    if (!seq) {
+        return {ScheduleStatus::queue_exhausted, std::nullopt};
+    }
+    return {ScheduleStatus::scheduled, seq};
 }
 
 std::optional<SequenceId> Simulator::schedule_script(
     SimTimeUs time,
     const ScriptActionEvent& action)
 {
-    return schedule_at(time, EventKind::script_action, action);
+    return schedule_at(
+        time,
+        EventKind::script_action,
+        action).seq;
 }
 
 std::optional<SequenceId> Simulator::schedule_message(
@@ -148,30 +160,46 @@ std::optional<MeasuredNs> Simulator::apply_effects(
                         record.trade_id,
                     });
             }
-            static_cast<void>(schedule_at(
+            const auto scheduled_log = schedule_at(
                 durable_time,
                 EventKind::flush_log,
                 FlushLogEvent{
                     source,
                     source_epoch,
                     std::move(deferred_logs),
-                }));
+                });
+            if (scheduled_log.status != ScheduleStatus::scheduled) {
+                emit_trace(
+                    SequenceId{0},
+                    now,
+                    "LOG_DEFER_REJECTED",
+                    "Effects::flush",
+                    0);
+            }
         }
 
         for (Outgoing& outgoing : effects.sends) {
-            static_cast<void>(schedule_at(
+            const auto scheduled_send = schedule_at(
                 *send_time,
                 EventKind::release_send,
                 ReleaseSendEvent{
                     source,
                     source_epoch,
                     outgoing.message,
-                }));
+                });
+            if (scheduled_send.status != ScheduleStatus::scheduled) {
+                emit_trace(
+                    SequenceId{0},
+                    now,
+                    "SEND_DEFER_REJECTED",
+                    "Effects::release",
+                    0);
+            }
         }
     }
 
     for (TimerRequest& timer : effects.timers) {
-        static_cast<void>(schedule_at(
+        const auto scheduled_timer = schedule_at(
             timer.fire_time_us,
             EventKind::fire_timer,
             FireTimerEvent{
@@ -180,7 +208,15 @@ std::optional<MeasuredNs> Simulator::apply_effects(
                 timer.kind,
                 timer.trade_id,
                 timer.expected_state,
-            }));
+            });
+        if (scheduled_timer.status != ScheduleStatus::scheduled) {
+            emit_trace(
+                SequenceId{0},
+                now,
+                "TIMER_REJECTED",
+                "Effects::timer",
+                0);
+        }
     }
 
     for (TraceNote& note : effects.notes) {
@@ -197,6 +233,9 @@ std::optional<MeasuredNs> Simulator::apply_effects(
 void Simulator::crash_node(NodeId node)
 {
     const std::size_t index = node_index(node);
+    if (!node_up_[index]) {
+        return;
+    }
     ++epochs_[index];
     node_up_[index] = false;
     network_.set_node_down(node, true);
@@ -222,6 +261,9 @@ void Simulator::crash_node(NodeId node)
 void Simulator::restart_node(NodeId node)
 {
     const std::size_t index = node_index(node);
+    if (node_up_[index]) {
+        return;
+    }
     node_up_[index] = true;
     network_.set_node_down(node, false);
 
@@ -230,7 +272,9 @@ void Simulator::restart_node(NodeId node)
         return;
     }
     const auto start = std::chrono::steady_clock::now();
-    Effects effects = implementation->on_restart(clock_.now_us());
+    Effects effects = implementation->on_restart(
+        durable_logs_[index],
+        clock_.now_us());
     const auto finish = std::chrono::steady_clock::now();
     const MeasuredNs measured =
         static_cast<MeasuredNs>(

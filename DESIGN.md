@@ -97,7 +97,8 @@ class Node {
   virtual Effects on_message(const Message&, SimTimeUs now) = 0;
   virtual Effects on_timer(const TimerEvent&, SimTimeUs now) = 0;
   virtual void    on_crash() = 0;                 // wipe volatile state
-  virtual Effects on_restart(SimTimeUs now) = 0;  // rebuild from durable log
+  virtual Effects on_restart(const std::vector<LogRecord>& durable_log,
+                             SimTimeUs now) = 0;
 };
 ```
 

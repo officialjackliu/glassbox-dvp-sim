@@ -27,6 +27,17 @@ struct SimulatorConfig {
     SimTimeUs log_flush_delay_us = 1'000;
 };
 
+enum class ScheduleStatus : std::uint8_t {
+    scheduled,
+    past_time,
+    queue_exhausted,
+};
+
+struct ScheduleResult {
+    ScheduleStatus status = ScheduleStatus::queue_exhausted;
+    std::optional<SequenceId> seq;
+};
+
 class Simulator {
   public:
     Simulator(const SimulatorConfig& config, TraceSink& trace_sink);
@@ -76,7 +87,7 @@ class Simulator {
     NetworkModel& network() noexcept;
 
   private:
-    [[nodiscard]] std::optional<SequenceId> schedule_at(
+    [[nodiscard]] ScheduleResult schedule_at(
         SimTimeUs time,
         EventKind kind,
         EventPayload payload);

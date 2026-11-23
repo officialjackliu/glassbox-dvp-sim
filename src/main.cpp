@@ -7,11 +7,15 @@
 //   glassbox-dvp-sim --tour [options]                    S1, S2, S6, S9, S14
 //
 // Player options: --speed slow|normal|fast|<25..800>, --paused, --no-color.
+// Settings (with --watch, --story or a plain run): --set key=value, e.g.
+//   --set vote_timeout=30ms  --set latency.COORD-BANK_B=80ms
+//   --set drop.COORD-BANK_A=20%  --set restart_after=2s
 // Exit codes: 0 quiesced, 2 usage error, 3 event bound hit (not quiesced).
 //
 // The player records the run first (cli/recording) and then only paces
 // what it shows; the simulation itself never waits or slows down.
 
+#include "cli/dials.hpp"
 #include "cli/guide.hpp"
 #include "cli/narrator.hpp"
 #include "cli/pacing.hpp"
@@ -56,7 +60,10 @@ int usage()
            "       glassbox-dvp-sim --scenario <ID> --watch [--speed "
            "slow|normal|fast|<25..800>] [--paused] [--no-color]\n"
            "       glassbox-dvp-sim --scenario <ID> --story\n"
-           "       glassbox-dvp-sim --tour [--speed ...] [--no-color]\n";
+           "       glassbox-dvp-sim --tour [--speed ...] [--no-color]\n"
+           "settings (repeatable): --set vote_timeout=30ms | "
+           "latency.COORD-BANK_B=80ms | drop.COORD-BANK_B=20% | "
+           "restart_after=2s\n";
     return 2;
 }
 
@@ -363,6 +370,7 @@ int main(int argc, char** argv)
     bool start_paused = false;
     bool color = true;
     bool tour = false;
+    std::vector<std::string_view> settings;
     int speed = cli::k_default_speed_percent;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg{argv[i]};
@@ -387,6 +395,8 @@ int main(int argc, char** argv)
             story = true;
         } else if (arg == "--tour") {
             tour = true;
+        } else if (arg == "--set" && i + 1 < argc) {
+            settings.emplace_back(argv[++i]);
         } else if (arg == "--paused") {
             start_paused = true;
         } else if (arg == "--no-color") {
@@ -402,7 +412,7 @@ int main(int argc, char** argv)
         }
     }
     if (tour) {
-        if (scenario_id || watch || story) {
+        if (scenario_id || watch || story || !settings.empty()) {
             return usage();
         }
         if (!cli::Terminal::interactive()) {
@@ -431,11 +441,22 @@ int main(int argc, char** argv)
         std::cerr << "unknown scenario: " << *scenario_id << '\n';
         return 2;
     }
+    glassbox::ScenarioSetup setup = info->make(seed);
+    std::string settings_text;
+    for (const std::string_view setting : settings) {
+        const cli::DialStatus status = cli::apply_dial(setup, setting);
+        if (status != cli::DialStatus::ok) {
+            std::cerr << "--set " << setting << ": " << cli::to_string(status)
+                      << '\n';
+            return 2;
+        }
+        settings_text += (settings_text.empty() ? " · " : ", ") +
+                         std::string{setting};
+    }
 
     if (watch || story) {
-        const cli::Recording rec =
-            cli::record(info->make(seed), k_max_player_events);
-        const std::string title = title_of(*info, seed);
+        const cli::Recording rec = cli::record(setup, k_max_player_events);
+        const std::string title = title_of(*info, seed) + settings_text;
         if (story || !cli::Terminal::interactive()) {
             if (watch) {
                 std::cerr << "not a terminal: printing the story instead\n";
@@ -456,7 +477,7 @@ int main(int argc, char** argv)
     }
 
     StdoutSink out;
-    glassbox::ScenarioRun run{info->make(seed), &out};
+    glassbox::ScenarioRun run{setup, &out};
     const bool quiesced = run.run();
     print_final_state(run);
     std::cout << "scenario=" << info->id << " seed=" << seed

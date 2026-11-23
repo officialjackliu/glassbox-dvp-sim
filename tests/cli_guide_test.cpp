@@ -51,6 +51,10 @@ void test_guides_match_the_scenarios()
     CHECK(glassbox::k_s4_slow_link_us == 300'000);
     CHECK(mentions(find_guide("S4")->what_it_shows, "300 ms"));
     CHECK(mentions(find_guide("S4")->what_it_shows, "500 ms vote timer"));
+    // The suggested setting really turns the false abort into a commit
+    // (cli_dials_test runs it).
+    CHECK(mentions(find_guide("S4")->watch_for,
+                   "make watch S=S4 SET=\"vote_timeout=900ms\""));
     CHECK(glassbox::make_s4_slow_link_tight_timeout(1).config.timers.vote_timeout_us ==
           500'000);
     CHECK(glassbox::k_s5_node_up_us == 3'000'000);

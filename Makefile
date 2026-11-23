@@ -5,6 +5,9 @@
 #   make tour                guided demo: S1, S2, S6, S9, S14 in slow motion
 #   make watch S=S9          watch one scenario (SPEED=slow|normal|fast)
 #   make story S=S9          the same explanation as plain text
+#   make watch S=S1 SET="vote_timeout=30ms"   change a setting and watch
+#       settings: vote_timeout=30ms latency.COORD-BANK_B=80ms
+#                 drop.COORD-BANK_B=20% restart_after=2s
 #   make run S=S9 SEED=1     print a scenario's full trace at once
 #   make test                build and run every test (Debug)
 #   make test-all            the merge gate: Debug, Release and UBSan
@@ -36,13 +39,15 @@ BIN := $(BUILD)/debug/glassbox-dvp-sim
 S ?=
 SEED ?= 1
 SPEED ?= normal
+SET ?=
+SETS = $(foreach s,$(SET),--set $(s))
 
 .PHONY: all build list run watch story tour test test-all test-asan clean help
 
 all: build
 
 help:
-	@sed -n '2,15p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '2,18p' Makefile | sed 's/^# \{0,1\}//'
 
 $(BUILD)/debug/CMakeCache.txt:
 	cmake -S . -B $(BUILD)/debug -DCMAKE_BUILD_TYPE=Debug $(CMAKE_COMMON)
@@ -70,18 +75,18 @@ list: build
 
 run: build
 	@if [ -z "$(S)" ]; then echo "usage: make run S=S1 [SEED=1]"; exit 2; fi
-	@$(BIN) --scenario $(S) --seed $(SEED)
+	@$(BIN) --scenario $(S) --seed $(SEED) $(SETS)
 
 watch: build
 	@if [ -z "$(S)" ]; then echo "usage: make watch S=S1 [SPEED=slow|normal|fast] [SEED=1]"; exit 2; fi
-	@$(BIN) --scenario $(S) --seed $(SEED) --watch --speed $(SPEED)
+	@$(BIN) --scenario $(S) --seed $(SEED) --watch --speed $(SPEED) $(SETS)
 
 tour: build
 	@$(BIN) --tour --speed $(SPEED)
 
 story: build
 	@if [ -z "$(S)" ]; then echo "usage: make story S=S1 [SEED=1]"; exit 2; fi
-	@$(BIN) --scenario $(S) --seed $(SEED) --story
+	@$(BIN) --scenario $(S) --seed $(SEED) --story $(SETS)
 
 # One build directory: build everything, then run its tests.
 define run_suite

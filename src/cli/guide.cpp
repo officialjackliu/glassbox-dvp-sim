@@ -25,7 +25,8 @@ constexpr std::array<ScenarioGuide, 14> k_guides{{
      "BANK_A buys from BANK_C in Singapore over a link slowed to 300 ms each "
      "way. The 500 ms vote timer runs out before BANK_C's YES arrives, so "
      "the coordinator aborts even though both banks agreed.",
-     "A false abort: safe, but wasted work. Try a longer vote_timeout."},
+     "A false abort: safe, but wasted work. Then try a longer timer: "
+     "make watch S=S4 SET=\"vote_timeout=900ms\""},
     {"S5", "A bank is offline before voting",
      "BANK_B is offline from the start and comes back at 3 s. Its PREPARE is "
      "lost, the vote timer runs out and the trade aborts. When BANK_B "

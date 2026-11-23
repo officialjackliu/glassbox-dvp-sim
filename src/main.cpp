@@ -1,22 +1,40 @@
-// glassbox-dvp-sim command-line runner (minimal, Task 15).
+// glassbox-dvp-sim command-line runner.
 //
 //   glassbox-dvp-sim --list
-//   glassbox-dvp-sim --scenario S1 [--seed 1]
+//   glassbox-dvp-sim --scenario S1 [--seed 1]            full trace at once
+//   glassbox-dvp-sim --scenario S1 --watch [options]     glass-box player
+//   glassbox-dvp-sim --scenario S1 --story               narrated, plain text
 //
-// Prints one line per trace record, then the final state of every node.
+// Player options: --speed slow|normal|fast|<25..800>, --paused, --no-color.
 // Exit codes: 0 quiesced, 2 usage error, 3 event bound hit (not quiesced).
+//
+// The player records the run first (cli/recording) and then only paces
+// what it shows; the simulation itself never waits or slows down.
 
+#include "cli/narrator.hpp"
+#include "cli/pacing.hpp"
+#include "cli/recording.hpp"
+#include "cli/screen.hpp"
+#include "cli/terminal.hpp"
 #include "scenarios/scenario.hpp"
 #include "trace/trace_format.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
 
 namespace {
+
+namespace cli = glassbox::cli;
+
+// Recordings stop here if a run never quiesces (e.g. a node never returns).
+constexpr std::size_t k_max_player_events = 20'000;
+constexpr std::int64_t k_tick_ms = 40;
 
 class StdoutSink : public glassbox::TraceSink {
   public:
@@ -28,8 +46,12 @@ class StdoutSink : public glassbox::TraceSink {
 
 int usage()
 {
-    std::cerr << "usage: glassbox-dvp-sim --list\n"
-                 "       glassbox-dvp-sim --scenario <ID> [--seed <N>]\n";
+    std::cerr
+        << "usage: glassbox-dvp-sim --list\n"
+           "       glassbox-dvp-sim --scenario <ID> [--seed <N>]\n"
+           "       glassbox-dvp-sim --scenario <ID> --watch [--speed "
+           "slow|normal|fast|<25..800>] [--paused] [--no-color]\n"
+           "       glassbox-dvp-sim --scenario <ID> --story\n";
     return 2;
 }
 
@@ -39,6 +61,28 @@ int usage()
     const auto [end, error] =
         std::from_chars(text.data(), text.data() + text.size(), value);
     if (error != std::errc{} || end != text.data() + text.size()) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+[[nodiscard]] std::optional<int> parse_speed(std::string_view text)
+{
+    if (text == "slow") {
+        return 50;
+    }
+    if (text == "normal") {
+        return 100;
+    }
+    if (text == "fast") {
+        return 200;
+    }
+    int value = 0;
+    const auto [end, error] =
+        std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size() ||
+        value < cli::k_speed_percent.front() ||
+        value > cli::k_speed_percent.back()) {
         return std::nullopt;
     }
     return value;
@@ -66,12 +110,194 @@ void print_final_state(const glassbox::ScenarioRun& run)
     }
 }
 
+// --- --story: the narration as plain text -----------------------------------
+
+void print_story(const cli::Recording& rec)
+{
+    for (std::size_t i = 1; i < rec.frames.size(); ++i) {
+        const cli::Story s = cli::narrate(rec, i);
+        const std::string time = cli::format_time(rec.frames[i].time_us);
+        std::string stamp = "[" + std::string(14 - std::min<std::size_t>(
+                                                       14, time.size()),
+                                              ' ') +
+                            time + "] ";
+        std::cout << stamp << s.headline << '\n';
+        if (cli::is_minor(rec.frames[i])) {
+            continue;
+        }
+        const std::string pad(stamp.size(), ' ');
+        for (const std::string& d : s.details) {
+            std::cout << pad << "· " << d << '\n';
+        }
+        if (!s.why.empty()) {
+            std::cout << pad << "why  " << s.why << '\n';
+        }
+        if (!s.code.empty()) {
+            std::cout << pad << "code " << s.code << '\n';
+        }
+    }
+}
+
+// --- --watch: the paced, full-screen player ---------------------------------
+
+enum class Flow { go, skip, restart, quit };
+
+struct Player {
+    const cli::Recording& rec;
+    std::string title;
+    int speed;
+    bool paused;
+    bool color;
+    cli::Terminal term;
+
+    void render(std::size_t frame, glassbox::SimTimeUs now)
+    {
+        const int width = std::clamp(term.columns(), 80, 200);
+        std::vector<std::string> lines;
+        const std::string head = "GLASS-BOX DvP SETTLEMENT · " + title;
+        const std::string note = "simplified educational model";
+        const std::size_t gap =
+            static_cast<std::size_t>(width) >
+                    cli::visible_width(head) + note.size()
+                ? static_cast<std::size_t>(width) - cli::visible_width(head) -
+                      note.size()
+                : 1;
+        lines.push_back((color ? "\x1b[1;7m" : "") + head + std::string(gap, ' ') +
+                        note + (color ? "\x1b[0m" : ""));
+        for (std::string& line :
+             cli::draw(rec, cli::Moment{frame, now, speed, paused},
+                       cli::ScreenOptions{width, color})) {
+            lines.push_back(std::move(line));
+        }
+        lines.emplace_back();
+        lines.push_back(std::string{color ? "\x1b[2m" : ""} +
+                        "[space] pause   [n] next event   [+/-] speed   "
+                        "[r] restart   [q] quit" +
+                        (color ? "\x1b[0m" : ""));
+        term.show(lines);
+    }
+
+    // Waits ms of playing time (forever while paused), handling keys.
+    Flow wait(std::int64_t ms, const std::function<void()>& redraw)
+    {
+        std::int64_t left = ms;
+        while (paused || left > 0) {
+            const std::int64_t slice = paused ? 250 : std::min(left, k_tick_ms);
+            switch (term.wait_key(slice)) {
+            case cli::Key::pause:
+                paused = !paused;
+                redraw();
+                break;
+            case cli::Key::next:
+                return Flow::skip;
+            case cli::Key::faster:
+                speed = cli::faster(speed);
+                redraw();
+                break;
+            case cli::Key::slower:
+                speed = cli::slower(speed);
+                redraw();
+                break;
+            case cli::Key::restart:
+                return Flow::restart;
+            case cli::Key::quit:
+                return Flow::quit;
+            case cli::Key::none:
+                if (!paused) {
+                    left -= slice;
+                }
+                break;
+            }
+        }
+        return Flow::go;
+    }
+
+    void play()
+    {
+        std::size_t frame = 1;
+        bool skip_travel = false;
+        render(0, 0);
+        if (wait(cli::k_dwell_ms * 100 / speed, [&] { render(0, 0); }) ==
+            Flow::quit) {
+            return;
+        }
+        while (frame < rec.frames.size()) {
+            const glassbox::SimTimeUs t0 = rec.frames[frame - 1].time_us;
+            const glassbox::SimTimeUs t1 = rec.frames[frame].time_us;
+            const bool flying = !cli::in_flight(rec, t0).empty();
+            glassbox::SimTimeUs now = t0;
+            Flow flow = Flow::go;
+            // Animate the gap: messages move, timers count down.
+            while (!skip_travel && now < t1) {
+                const cli::Pace p = cli::pace(t1 - t0, flying, false, speed);
+                if (p.travel_ms <= 0) {
+                    break;
+                }
+                render(frame - 1, now);
+                flow = wait(k_tick_ms, [&] { render(frame - 1, now); });
+                if (flow != Flow::go) {
+                    break;
+                }
+                const auto step = glassbox::checked_multiply_i64(t1 - t0, k_tick_ms);
+                const glassbox::SimTimeUs advance =
+                    step ? std::max<glassbox::SimTimeUs>(*step / p.travel_ms, 1)
+                         : t1 - now;
+                now = advance >= t1 - now ? t1 : now + advance;
+            }
+            skip_travel = false;
+            if (flow == Flow::quit) {
+                return;
+            }
+            if (flow == Flow::restart) {
+                frame = 1;
+                render(0, 0);
+                continue;
+            }
+            // Show the event and hold it.
+            render(frame, t1);
+            const cli::Pace hold =
+                cli::pace(0, false, cli::is_minor(rec.frames[frame]), speed);
+            flow = wait(hold.dwell_ms, [&] { render(frame, t1); });
+            if (flow == Flow::quit) {
+                return;
+            }
+            if (flow == Flow::restart) {
+                frame = 1;
+                render(0, 0);
+                continue;
+            }
+            // Stepping while paused jumps straight to the next event.
+            skip_travel = flow == Flow::skip && paused;
+            ++frame;
+        }
+        // End: stay on the last event until a key.
+        paused = true;
+        render(rec.frames.size() - 1, rec.frames.back().time_us);
+        while (true) {
+            const cli::Key key = term.wait_key(1'000);
+            if (key == cli::Key::restart) {
+                paused = false;
+                play();
+                return;
+            }
+            if (key != cli::Key::none) {
+                return;
+            }
+        }
+    }
+};
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     std::optional<std::string_view> scenario_id;
     std::uint64_t seed = 1;
+    bool watch = false;
+    bool story = false;
+    bool start_paused = false;
+    bool color = true;
+    int speed = cli::k_default_speed_percent;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg{argv[i]};
         if (arg == "--list") {
@@ -89,17 +315,54 @@ int main(int argc, char** argv)
                 return usage();
             }
             seed = *parsed;
+        } else if (arg == "--watch") {
+            watch = true;
+        } else if (arg == "--story") {
+            story = true;
+        } else if (arg == "--paused") {
+            start_paused = true;
+        } else if (arg == "--no-color") {
+            color = false;
+        } else if (arg == "--speed" && i + 1 < argc) {
+            const auto parsed = parse_speed(argv[++i]);
+            if (!parsed) {
+                return usage();
+            }
+            speed = *parsed;
         } else {
             return usage();
         }
     }
-    if (!scenario_id) {
+    if (!scenario_id || (watch && story)) {
         return usage();
     }
     const glassbox::ScenarioInfo* info = glassbox::find_scenario(*scenario_id);
     if (!info) {
         std::cerr << "unknown scenario: " << *scenario_id << '\n';
         return 2;
+    }
+
+    if (watch || story) {
+        const cli::Recording rec =
+            cli::record(info->make(seed), k_max_player_events);
+        const std::string title = std::string{info->id} + " " +
+                                  std::string{info->name} + " · seed " +
+                                  std::to_string(seed);
+        if (story || !cli::Terminal::interactive()) {
+            if (watch) {
+                std::cerr << "not a terminal: printing the story instead\n";
+            }
+            std::cout << title << "\n\n";
+            print_story(rec);
+        } else {
+            Player player{rec, title, speed, start_paused, color, {}};
+            player.play();
+        }
+        if (!rec.quiesced) {
+            std::cerr << "stopped after " << k_max_player_events
+                      << " events: the run did not finish\n";
+        }
+        return rec.quiesced ? 0 : 3;
     }
 
     StdoutSink out;

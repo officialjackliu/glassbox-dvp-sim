@@ -54,6 +54,9 @@ target_include_directories(glassbox_core PUBLIC include)
 add_library(glassbox_cli STATIC
     src/cli/recording.cpp
     src/cli/narrator.cpp
+    src/cli/pacing.cpp
+    src/cli/screen.cpp
+    src/cli/terminal.cpp
 )
 target_include_directories(glassbox_cli PUBLIC include)
 target_link_libraries(glassbox_cli PUBLIC glassbox_core)
@@ -294,3 +297,11 @@ add_test(NAME cli_recording_test COMMAND cli_recording_test)
 add_executable(cli_narrator_test tests/cli_narrator_test.cpp)
 target_link_libraries(cli_narrator_test PRIVATE glassbox_cli)
 add_test(NAME cli_narrator_test COMMAND cli_narrator_test)
+
+add_executable(cli_player_test tests/cli_player_test.cpp)
+target_link_libraries(cli_player_test PRIVATE glassbox_cli)
+add_test(NAME cli_player_test COMMAND cli_player_test)
+
+add_executable(cli_screen_test tests/cli_screen_test.cpp)
+target_link_libraries(cli_screen_test PRIVATE glassbox_cli)
+add_test(NAME cli_screen_test COMMAND cli_screen_test)

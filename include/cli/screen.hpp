@@ -8,6 +8,7 @@
 // wire with their progress; the story of the latest event; the safety
 // checks. Pure: same inputs, same lines (tests compare them exactly).
 
+#include "cli/guide.hpp"
 #include "cli/recording.hpp"
 
 #include <string>
@@ -31,6 +32,12 @@ struct ScreenOptions {
 [[nodiscard]] std::vector<std::string> draw(const Recording& recording,
                                             const Moment& moment,
                                             const ScreenOptions& options);
+
+// The card shown before a scenario plays: what happens, the trades, the
+// nodes with their starting balances, and what to watch for.
+[[nodiscard]] std::vector<std::string> draw_intro(const Recording& recording,
+                                                  const ScenarioGuide& guide,
+                                                  const ScreenOptions& options);
 
 // Columns a string takes on screen: UTF-8 code points, ANSI color escapes
 // excluded (every character the screen uses is one column wide).

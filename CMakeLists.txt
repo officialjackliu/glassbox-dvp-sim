@@ -57,6 +57,7 @@ add_library(glassbox_cli STATIC
     src/cli/pacing.cpp
     src/cli/screen.cpp
     src/cli/terminal.cpp
+    src/cli/guide.cpp
 )
 target_include_directories(glassbox_cli PUBLIC include)
 target_link_libraries(glassbox_cli PUBLIC glassbox_core)
@@ -305,3 +306,7 @@ add_test(NAME cli_player_test COMMAND cli_player_test)
 add_executable(cli_screen_test tests/cli_screen_test.cpp)
 target_link_libraries(cli_screen_test PRIVATE glassbox_cli)
 add_test(NAME cli_screen_test COMMAND cli_screen_test)
+
+add_executable(cli_guide_test tests/cli_guide_test.cpp)
+target_link_libraries(cli_guide_test PRIVATE glassbox_cli)
+add_test(NAME cli_guide_test COMMAND cli_guide_test)

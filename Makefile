@@ -2,7 +2,8 @@
 #
 #   make                     build the simulator (Debug)
 #   make list                list the scenarios
-#   make watch S=S9          watch it in slow motion (SPEED=slow|normal|fast)
+#   make tour                guided demo: S1, S2, S6, S9, S14 in slow motion
+#   make watch S=S9          watch one scenario (SPEED=slow|normal|fast)
 #   make story S=S9          the same explanation as plain text
 #   make run S=S9 SEED=1     print a scenario's full trace at once
 #   make test                build and run every test (Debug)
@@ -36,12 +37,12 @@ S ?=
 SEED ?= 1
 SPEED ?= normal
 
-.PHONY: all build list run watch story test test-all test-asan clean help
+.PHONY: all build list run watch story tour test test-all test-asan clean help
 
 all: build
 
 help:
-	@sed -n '2,14p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '2,15p' Makefile | sed 's/^# \{0,1\}//'
 
 $(BUILD)/debug/CMakeCache.txt:
 	cmake -S . -B $(BUILD)/debug -DCMAKE_BUILD_TYPE=Debug $(CMAKE_COMMON)
@@ -74,6 +75,9 @@ run: build
 watch: build
 	@if [ -z "$(S)" ]; then echo "usage: make watch S=S1 [SPEED=slow|normal|fast] [SEED=1]"; exit 2; fi
 	@$(BIN) --scenario $(S) --seed $(SEED) --watch --speed $(SPEED)
+
+tour: build
+	@$(BIN) --tour --speed $(SPEED)
 
 story: build
 	@if [ -z "$(S)" ]; then echo "usage: make story S=S1 [SEED=1]"; exit 2; fi

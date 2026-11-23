@@ -4,6 +4,7 @@
 //   glassbox-dvp-sim --scenario S1 [--seed 1]            full trace at once
 //   glassbox-dvp-sim --scenario S1 --watch [options]     glass-box player
 //   glassbox-dvp-sim --scenario S1 --story               narrated, plain text
+//   glassbox-dvp-sim --tour [options]                    S1, S2, S6, S9, S14
 //
 // Player options: --speed slow|normal|fast|<25..800>, --paused, --no-color.
 // Exit codes: 0 quiesced, 2 usage error, 3 event bound hit (not quiesced).
@@ -11,6 +12,7 @@
 // The player records the run first (cli/recording) and then only paces
 // what it shows; the simulation itself never waits or slows down.
 
+#include "cli/guide.hpp"
 #include "cli/narrator.hpp"
 #include "cli/pacing.hpp"
 #include "cli/recording.hpp"
@@ -35,6 +37,8 @@ namespace cli = glassbox::cli;
 // Recordings stop here if a run never quiesces (e.g. a node never returns).
 constexpr std::size_t k_max_player_events = 20'000;
 constexpr std::int64_t k_tick_ms = 40;
+// Intro and end cards move on by themselves after this long (at 100%).
+constexpr std::int64_t k_card_ms = 12'000;
 
 class StdoutSink : public glassbox::TraceSink {
   public:
@@ -51,7 +55,8 @@ int usage()
            "       glassbox-dvp-sim --scenario <ID> [--seed <N>]\n"
            "       glassbox-dvp-sim --scenario <ID> --watch [--speed "
            "slow|normal|fast|<25..800>] [--paused] [--no-color]\n"
-           "       glassbox-dvp-sim --scenario <ID> --story\n";
+           "       glassbox-dvp-sim --scenario <ID> --story\n"
+           "       glassbox-dvp-sim --tour [--speed ...] [--no-color]\n";
     return 2;
 }
 
@@ -142,38 +147,79 @@ void print_story(const cli::Recording& rec)
 
 enum class Flow { go, skip, restart, quit };
 
+// What the viewer chose at the end of a scenario.
+enum class Next { next, quit };
+
 struct Player {
+    cli::Terminal& term;
     const cli::Recording& rec;
+    const cli::ScenarioGuide* guide;
     std::string title;
     int speed;
     bool paused;
     bool color;
-    cli::Terminal term;
+
+    [[nodiscard]] int width() const
+    {
+        return std::clamp(term.columns(), 80, 200);
+    }
+
+    [[nodiscard]] std::string banner() const
+    {
+        const std::string head = "GLASS-BOX DvP SETTLEMENT · " + title;
+        const std::string note = "simplified educational model";
+        const std::size_t w = static_cast<std::size_t>(width());
+        const std::size_t gap = w > cli::visible_width(head) + note.size()
+                                    ? w - cli::visible_width(head) - note.size()
+                                    : 1;
+        return (color ? "\x1b[1;7m" : "") + head + std::string(gap, ' ') +
+               note + (color ? "\x1b[0m" : "");
+    }
+
+    [[nodiscard]] std::string footer(std::string_view keys) const
+    {
+        return std::string{color ? "\x1b[2m" : ""} + std::string{keys} +
+               (color ? "\x1b[0m" : "");
+    }
+
+    // A card (intro or end) held until a key or k_card_ms.
+    [[nodiscard]] cli::Key show_card(std::vector<std::string> body,
+                                     std::string_view keys)
+    {
+        std::vector<std::string> lines{banner(), ""};
+        for (std::string& line : body) {
+            lines.push_back(std::move(line));
+        }
+        lines.emplace_back();
+        lines.push_back(footer(keys));
+        term.show(lines);
+        for (std::int64_t waited = 0; waited < k_card_ms * 100 / speed;
+             waited += 250) {
+            const cli::Key key = term.wait_key(250);
+            if (key == cli::Key::faster) {
+                speed = cli::faster(speed);
+            } else if (key == cli::Key::slower) {
+                speed = cli::slower(speed);
+            } else if (key != cli::Key::none) {
+                return key;
+            }
+        }
+        return cli::Key::none;
+    }
 
     void render(std::size_t frame, glassbox::SimTimeUs now)
     {
-        const int width = std::clamp(term.columns(), 80, 200);
+        const int width = this->width();
         std::vector<std::string> lines;
-        const std::string head = "GLASS-BOX DvP SETTLEMENT · " + title;
-        const std::string note = "simplified educational model";
-        const std::size_t gap =
-            static_cast<std::size_t>(width) >
-                    cli::visible_width(head) + note.size()
-                ? static_cast<std::size_t>(width) - cli::visible_width(head) -
-                      note.size()
-                : 1;
-        lines.push_back((color ? "\x1b[1;7m" : "") + head + std::string(gap, ' ') +
-                        note + (color ? "\x1b[0m" : ""));
+        lines.push_back(banner());
         for (std::string& line :
              cli::draw(rec, cli::Moment{frame, now, speed, paused},
                        cli::ScreenOptions{width, color})) {
             lines.push_back(std::move(line));
         }
         lines.emplace_back();
-        lines.push_back(std::string{color ? "\x1b[2m" : ""} +
-                        "[space] pause   [n] next event   [+/-] speed   "
-                        "[r] restart   [q] quit" +
-                        (color ? "\x1b[0m" : ""));
+        lines.push_back(footer("[space] pause   [n] next event   [+/-] speed   "
+                               "[r] restart   [q] quit"));
         term.show(lines);
     }
 
@@ -212,14 +258,24 @@ struct Player {
         return Flow::go;
     }
 
-    void play()
+    // Intro card, the run, then the end. Returns what the viewer chose.
+    Next play()
     {
+        if (guide) {
+            const cli::Key key = show_card(
+                cli::draw_intro(rec, *guide, cli::ScreenOptions{width(), color}),
+                "[n] or Enter: start   [+/-] speed   [q] quit   "
+                "(starts by itself in a few seconds)");
+            if (key == cli::Key::quit) {
+                return Next::quit;
+            }
+        }
         std::size_t frame = 1;
         bool skip_travel = false;
         render(0, 0);
         if (wait(cli::k_dwell_ms * 100 / speed, [&] { render(0, 0); }) ==
             Flow::quit) {
-            return;
+            return Next::quit;
         }
         while (frame < rec.frames.size()) {
             const glassbox::SimTimeUs t0 = rec.frames[frame - 1].time_us;
@@ -246,7 +302,7 @@ struct Player {
             }
             skip_travel = false;
             if (flow == Flow::quit) {
-                return;
+                return Next::quit;
             }
             if (flow == Flow::restart) {
                 frame = 1;
@@ -259,7 +315,7 @@ struct Player {
                 cli::pace(0, false, cli::is_minor(rec.frames[frame]), speed);
             flow = wait(hold.dwell_ms, [&] { render(frame, t1); });
             if (flow == Flow::quit) {
-                return;
+                return Next::quit;
             }
             if (flow == Flow::restart) {
                 frame = 1;
@@ -270,22 +326,31 @@ struct Player {
             skip_travel = flow == Flow::skip && paused;
             ++frame;
         }
-        // End: stay on the last event until a key.
-        paused = true;
+        // End: hold the last event until a key (or k_card_ms).
         render(rec.frames.size() - 1, rec.frames.back().time_us);
-        while (true) {
-            const cli::Key key = term.wait_key(1'000);
+        for (std::int64_t waited = 0; waited < k_card_ms * 100 / speed;
+             waited += 250) {
+            const cli::Key key = term.wait_key(250);
             if (key == cli::Key::restart) {
-                paused = false;
-                play();
-                return;
+                return play();
+            }
+            if (key == cli::Key::quit) {
+                return Next::quit;
             }
             if (key != cli::Key::none) {
-                return;
+                break;
             }
         }
+        return Next::next;
     }
 };
+
+[[nodiscard]] std::string title_of(const glassbox::ScenarioInfo& info,
+                                   std::uint64_t seed)
+{
+    return std::string{info.id} + " " + std::string{info.name} + " · seed " +
+           std::to_string(seed);
+}
 
 } // namespace
 
@@ -297,6 +362,7 @@ int main(int argc, char** argv)
     bool story = false;
     bool start_paused = false;
     bool color = true;
+    bool tour = false;
     int speed = cli::k_default_speed_percent;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg{argv[i]};
@@ -319,6 +385,8 @@ int main(int argc, char** argv)
             watch = true;
         } else if (arg == "--story") {
             story = true;
+        } else if (arg == "--tour") {
+            tour = true;
         } else if (arg == "--paused") {
             start_paused = true;
         } else if (arg == "--no-color") {
@@ -333,6 +401,28 @@ int main(int argc, char** argv)
             return usage();
         }
     }
+    if (tour) {
+        if (scenario_id || watch || story) {
+            return usage();
+        }
+        if (!cli::Terminal::interactive()) {
+            std::cerr << "the tour needs a terminal; try --story\n";
+            return 2;
+        }
+        cli::Terminal term;
+        for (const std::string_view id : cli::k_tour) {
+            const glassbox::ScenarioInfo* info = glassbox::find_scenario(id);
+            const cli::Recording rec =
+                cli::record(info->make(seed), k_max_player_events);
+            Player player{term,  rec,          cli::find_guide(id),
+                          title_of(*info, seed), speed, start_paused, color};
+            if (player.play() == Next::quit) {
+                break;
+            }
+            speed = player.speed;
+        }
+        return 0;
+    }
     if (!scenario_id || (watch && story)) {
         return usage();
     }
@@ -345,9 +435,7 @@ int main(int argc, char** argv)
     if (watch || story) {
         const cli::Recording rec =
             cli::record(info->make(seed), k_max_player_events);
-        const std::string title = std::string{info->id} + " " +
-                                  std::string{info->name} + " · seed " +
-                                  std::to_string(seed);
+        const std::string title = title_of(*info, seed);
         if (story || !cli::Terminal::interactive()) {
             if (watch) {
                 std::cerr << "not a terminal: printing the story instead\n";
@@ -355,8 +443,10 @@ int main(int argc, char** argv)
             std::cout << title << "\n\n";
             print_story(rec);
         } else {
-            Player player{rec, title, speed, start_paused, color, {}};
-            player.play();
+            cli::Terminal term;
+            Player player{term,  rec,   cli::find_guide(info->id),
+                          title, speed, start_paused, color};
+            static_cast<void>(player.play());
         }
         if (!rec.quiesced) {
             std::cerr << "stopped after " << k_max_player_events

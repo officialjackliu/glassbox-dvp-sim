@@ -624,6 +624,75 @@ std::size_t visible_width(std::string_view text) noexcept
     return cols;
 }
 
+std::vector<std::string> draw_intro(const Recording& rec,
+                                    const ScenarioGuide& guide,
+                                    const ScreenOptions& options)
+{
+    const std::size_t width =
+        static_cast<std::size_t>(std::clamp(options.width, 80, 200));
+    const Paint paint{options.color};
+    std::vector<std::string> out;
+    const auto section = [&](std::string_view heading) {
+        out.push_back(std::string(width, ' '));
+        out.push_back(paint(fit("  " + std::string{heading}, width), k_bold));
+    };
+    out.push_back(paint(fit("  " + std::string{guide.id} + " · " +
+                                std::string{guide.title},
+                            width),
+                        k_bold));
+
+    section("What happens");
+    for (const std::string& line :
+         wrap(guide.what_it_shows, width - 2, "    ", "    ")) {
+        out.push_back(fit(line, width));
+    }
+
+    section(rec.frames.back().nodes[0].coordinator_trades.size() > 1
+                ? "The trades"
+                : "The trade");
+    for (const auto& [id, t] : rec.frames.back().nodes[0].coordinator_trades) {
+        out.push_back(fit("    #" + std::to_string(id.value()) + "  " +
+                              name(t.trade.buyer()) + " buys " +
+                              bonds_text(t.trade.qty().value()) + " from " +
+                              name(t.trade.seller()) + " for " +
+                              dollars(t.trade.cash_cents()),
+                          width));
+    }
+
+    section("The nodes");
+    for (const NodeId node : involved_nodes(rec)) {
+        const NodeView& v = rec.frames[0].nodes[view_index(node)];
+        std::string line = "    " + fit(name(node), 8) + fit(city(node), 11);
+        if (v.balances) {
+            line += "cash " + dollars(Cents{v.balances->cash_total}) +
+                    " · bonds " + with_commas(v.balances->bonds_total);
+            if (v.frozen) {
+                line += " · account FROZEN";
+            }
+        } else {
+            line += "coordinator: collects votes, decides, tells both banks";
+        }
+        out.push_back(fit(line, width));
+    }
+
+    section("Watch for");
+    for (const std::string& line :
+         wrap(guide.watch_for, width - 2, "    ", "    ")) {
+        out.push_back(paint(fit(line, width), k_cyan));
+    }
+
+    section("How it works");
+    for (const std::string& line : wrap(
+             "Two-phase commit: each bank checks and locks its side, then "
+             "votes. Only if both vote YES does the coordinator write COMMIT "
+             "to disk and tell them to settle; otherwise everyone releases. "
+             "Either both legs move or neither does.",
+             width - 2, "    ", "    ")) {
+        out.push_back(fit(line, width));
+    }
+    return out;
+}
+
 std::vector<std::string> draw(const Recording& rec,
                               const Moment& moment,
                               const ScreenOptions& options)

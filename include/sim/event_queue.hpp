@@ -7,6 +7,7 @@
 // first. It performs no real-time or wall-clock operations.
 
 #include "sim/core_types.hpp"
+#include "domain/log_records.hpp"
 
 #include <cstdint>
 #include <limits>
@@ -162,15 +163,10 @@ struct ScriptActionEvent {
         ScriptNodeUp> action;
 };
 
-struct DeferredLogRecord {
-    std::string kind;
-    std::optional<TradeId> trade_id;
-};
-
 struct FlushLogEvent {
     NodeId node;
     std::uint64_t epoch;
-    std::vector<DeferredLogRecord> records;
+    std::vector<LogRecord> records;
 };
 
 struct ReleaseSendEvent {

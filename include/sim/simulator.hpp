@@ -14,6 +14,7 @@
 #include "sim/trace.hpp"
 #include "sim/timers.hpp"
 #include "sim/virtual_clock.hpp"
+#include "domain/durable_log.hpp"
 
 #include <array>
 #include <memory>
@@ -64,7 +65,7 @@ class Simulator {
     void set_node_up(NodeId node, bool up) noexcept;
 
     [[nodiscard]] std::uint64_t epoch(NodeId node) const noexcept;
-    [[nodiscard]] const std::vector<LogRecord>& durable_log(
+    [[nodiscard]] std::span<const LogEntry> durable_log(
         NodeId node) const noexcept;
 
     [[nodiscard]] SimTimeUs now_us() const noexcept;
@@ -142,7 +143,7 @@ class Simulator {
     std::array<std::unique_ptr<Node>, k_node_count> nodes_{};
     std::array<bool, k_node_count> node_up_{};
     std::array<std::uint64_t, k_node_count> epochs_{};
-    std::array<std::vector<LogRecord>, k_node_count> durable_logs_{};
+    std::array<DurableLog, k_node_count> durable_logs_{};
     std::uint64_t trace_seq_ = 0;
 };
 

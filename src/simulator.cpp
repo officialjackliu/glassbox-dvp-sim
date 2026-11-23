@@ -61,9 +61,9 @@ std::uint64_t Simulator::epoch(NodeId node) const noexcept
     return epochs_[node_index(node)];
 }
 
-const std::vector<LogRecord>& Simulator::durable_log(NodeId node) const noexcept
+std::span<const LogEntry> Simulator::durable_log(NodeId node) const noexcept
 {
-    return durable_logs_[node_index(node)];
+    return durable_logs_[node_index(node)].entries();
 }
 
 SimTimeUs Simulator::now_us() const noexcept
@@ -157,15 +157,9 @@ std::optional<MeasuredNs> Simulator::apply_effects(
 
     if (*send_time >= 0) {
         if (has_logs) {
-            std::vector<DeferredLogRecord> deferred_logs;
+            std::vector<LogRecord> deferred_logs;
             deferred_logs.reserve(effects.logs.size());
-            for (const LogRecord& record : effects.logs) {
-                deferred_logs.push_back(
-                    DeferredLogRecord{
-                        record.kind,
-                        record.trade_id,
-                    });
-            }
+            deferred_logs = effects.logs;
             const auto scheduled_log = schedule_at(
                 durable_time,
                 EventKind::flush_log,
@@ -312,7 +306,7 @@ void Simulator::restart_node(NodeId node)
     }
     const auto start = std::chrono::steady_clock::now();
     Effects effects = implementation->on_restart(
-        durable_logs_[index],
+        durable_logs_[index].entries(),
         clock_.now_us());
     const auto finish = std::chrono::steady_clock::now();
     const MeasuredNs measured =
@@ -454,13 +448,13 @@ void Simulator::dispatch_flush(const FlushLogEvent& payload,
         epochs_[index] != payload.epoch) {
         return;
     }
-    std::vector<LogRecord>& log = durable_logs_[index];
-    for (const DeferredLogRecord& record : payload.records) {
-        log.push_back(
-            LogRecord{
-                record.kind,
-                record.trade_id,
-            });
+    DurableLog& log = durable_logs_[index];
+    for (const LogRecord& record : payload.records) {
+        const auto entry =
+            log.append(record, clock_.now_us());
+        if (!entry) {
+            continue;
+        }
         emit_trace(
             seq,
             clock_.now_us(),

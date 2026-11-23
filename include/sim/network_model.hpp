@@ -144,6 +144,14 @@ class NetworkModel {
         next_drops_.push_back(NextDrop{from, to, std::nullopt});
     }
 
+    // The next matching message on this directed link is delivered twice.
+    // The copy keeps the msg_id and consumes its own jitter + drop draws
+    // (it is a second message on the wire), right after the original's.
+    void duplicate_next(NodeId from, NodeId to, MessageType message_type)
+    {
+        next_duplicates_.push_back(NextDrop{from, to, message_type});
+    }
+
     // Called by send-side simulator code. It always consumes the configured
     // jitter and PPM drop draws before applying non-random fault precedence.
     // node_down(to) is a send-time check in this component. Task 6's event loop
@@ -174,6 +182,33 @@ class NetworkModel {
     // Full-message overload: the body travels with the message unchanged.
     // Draw order is identical to the field overload (one jitter + one drop).
     [[nodiscard]] NetworkScheduleResult schedule_delivery(
+        EventQueue& queue,
+        SimTimeUs send_time_us,
+        Message message)
+    {
+        bool duplicate = false;
+        for (std::size_t i = 0; i < next_duplicates_.size(); ++i) {
+            const NextDrop& next = next_duplicates_[i];
+            if (next.from == message.from && next.to == message.to &&
+                next.message_type == message.type) {
+                next_duplicates_.erase(next_duplicates_.begin() +
+                                       static_cast<std::ptrdiff_t>(i));
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            return schedule_one(queue, send_time_us, std::move(message));
+        }
+        Message copy = message;
+        NetworkScheduleResult original =
+            schedule_one(queue, send_time_us, std::move(message));
+        static_cast<void>(schedule_one(queue, send_time_us, std::move(copy)));
+        return original;
+    }
+
+  private:
+    [[nodiscard]] NetworkScheduleResult schedule_one(
         EventQueue& queue,
         SimTimeUs send_time_us,
         Message message)
@@ -260,7 +295,6 @@ class NetworkModel {
                 send_time_us, *deliver_at};
     }
 
-  private:
     [[nodiscard]] static std::size_t node_index(NodeId node) noexcept
     {
         return static_cast<std::size_t>(node);
@@ -271,6 +305,7 @@ class NetworkModel {
     std::array<std::array<bool, k_node_count>, k_node_count> partition_{};
     std::array<bool, k_node_count> node_down_{};
     std::vector<NextDrop> next_drops_;
+    std::vector<NextDrop> next_duplicates_;
 };
 
 } // namespace glassbox

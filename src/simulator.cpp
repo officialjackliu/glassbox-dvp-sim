@@ -760,6 +760,9 @@ void Simulator::dispatch_script(const ScriptActionEvent& payload,
             set_node_up(action.node, false);
         } else if constexpr (std::is_same_v<Action, ScriptNodeUp>) {
             set_node_up(action.node, true);
+        } else if constexpr (std::is_same_v<Action, ScriptDuplicateNext>) {
+            network_.duplicate_next(action.from, action.to,
+                                    action.message_type);
         }
     }, payload.action);
     emit_trace(

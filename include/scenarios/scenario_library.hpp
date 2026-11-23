@@ -59,6 +59,34 @@ inline constexpr SimTimeUs k_s7_restart_after_us = 2'000'000;
 inline constexpr SimTimeUs k_s8_restart_after_us = 2'000'000;
 [[nodiscard]] ScenarioSetup make_s8_crash_before_log(std::uint64_t seed);
 
+// S9: the coordinator crashes AFTER_LOG_BEFORE_SEND on the deciding VOTE
+// (the second VOTE of trade 1): DECISION_COMMIT is durable, no COMMIT
+// leaves. Both participants stay in doubt, holding their locks and
+// retrying OUTCOME_QUERY, until the coordinator restarts and resends
+// COMMIT. Shows that 2PC is blocking.
+inline constexpr SimTimeUs k_s9_restart_after_us = 5'000'000;
+[[nodiscard]] ScenarioSetup make_s9_coordinator_crash_after_decision(
+    std::uint64_t seed);
+
+// S10: the coordinator crashes AFTER_FIRST_SEND on the deciding VOTE: the
+// COMMIT to the buyer (first in the broadcast) leaves, the one to the
+// seller is lost. BANK_A commits at once; BANK_B stays in doubt until the
+// restart resends.
+inline constexpr SimTimeUs k_s10_restart_after_us = 5'000'000;
+[[nodiscard]] ScenarioSetup make_s10_coordinator_crash_mid_broadcast(
+    std::uint64_t seed);
+
+// S11: the first COMMIT to BANK_A is lost (drop_next). The coordinator's
+// retransmit delivers it. BANK_A's decision-wait starts at 2 s here so the
+// retransmit (1 s) arrives before BANK_A would ask.
+[[nodiscard]] ScenarioSetup make_s11_lost_commit(std::uint64_t seed);
+
+// S12: high jitter on COORD<->BANK_A and COORD<->BANK_B and duplicated
+// PREPARE and COMMIT on both links. Messages arrive reordered and twice;
+// the state tables must absorb it.
+[[nodiscard]] ScenarioSetup make_s12_duplicates_and_reordering(
+    std::uint64_t seed);
+
 // S13: BANK_B (seller) holds k_s13_seller_bonds bonds, enough for one
 // standard trade but not two. Trade 1 (BANK_A buys) and trade 2 (BANK_C
 // buys) are submitted at t=0 in that order; both PREPAREs reach BANK_B at

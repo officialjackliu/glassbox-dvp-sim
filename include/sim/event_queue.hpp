@@ -145,6 +145,12 @@ struct ScriptNodeUp {
     NodeId node;
 };
 
+struct ScriptDuplicateNext {
+    NodeId from;
+    NodeId to;
+    MessageType message_type;
+};
+
 // Client submission of a PROPOSE. Delivered directly to the coordinator at the
 // scripted time (the client is co-located), so it consumes no RNG draws.
 struct ScriptSubmitTrade {
@@ -160,7 +166,8 @@ struct ScriptActionEvent {
         ScriptRestart,
         ScriptNodeDown,
         ScriptNodeUp,
-        ScriptSubmitTrade> action;
+        ScriptSubmitTrade,
+        ScriptDuplicateNext> action;
 };
 
 struct FlushLogEvent {

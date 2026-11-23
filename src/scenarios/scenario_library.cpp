@@ -1,5 +1,7 @@
 #include "scenarios/scenario_library.hpp"
 
+#include <tuple>
+
 namespace glassbox {
 
 namespace {
@@ -115,6 +117,85 @@ ScenarioSetup make_s8_crash_before_log(std::uint64_t seed)
 {
     return bank_a_prepare_crash(seed, CrashPoint::before_log,
                                 k_s8_restart_after_us);
+}
+
+namespace {
+
+[[nodiscard]] ScenarioSetup deciding_vote_crash(std::uint64_t seed,
+                                                CrashPoint point,
+                                                SimTimeUs restart_after_us)
+{
+    ScenarioSetup setup = base_setup(seed);
+    setup.script.push_back(submit(0, standard_trade()));
+    setup.crashes.push_back(CrashSpec{
+        NodeId::coordinator,
+        TradeId{1},
+        CrashTrigger{MessageType::vote},
+        point,
+        restart_after_us,
+        2, // the second VOTE is the one that decides
+    });
+    return setup;
+}
+
+[[nodiscard]] TimedAction jitter_link(NodeId from,
+                                      NodeId to,
+                                      SimTimeUs base_us,
+                                      SimTimeUs jitter_us)
+{
+    return TimedAction{0, ScriptActionEvent{ScriptSetLink{
+                              from, to, base_us, jitter_us, 0}}};
+}
+
+[[nodiscard]] TimedAction duplicate(NodeId from, NodeId to, MessageType type)
+{
+    return TimedAction{0, ScriptActionEvent{
+                              ScriptDuplicateNext{from, to, type}}};
+}
+
+} // namespace
+
+ScenarioSetup make_s9_coordinator_crash_after_decision(std::uint64_t seed)
+{
+    return deciding_vote_crash(seed, CrashPoint::after_log_before_send,
+                               k_s9_restart_after_us);
+}
+
+ScenarioSetup make_s10_coordinator_crash_mid_broadcast(std::uint64_t seed)
+{
+    return deciding_vote_crash(seed, CrashPoint::after_first_send,
+                               k_s10_restart_after_us);
+}
+
+ScenarioSetup make_s11_lost_commit(std::uint64_t seed)
+{
+    ScenarioSetup setup = base_setup(seed);
+    setup.config.timers.decision_wait = BackoffPolicy{2'000'000, 8'000'000};
+    setup.script.push_back(TimedAction{
+        0, ScriptActionEvent{ScriptDropNext{NodeId::coordinator,
+                                            NodeId::bank_a,
+                                            MessageType::commit}}});
+    setup.script.push_back(submit(0, standard_trade()));
+    return setup;
+}
+
+ScenarioSetup make_s12_duplicates_and_reordering(std::uint64_t seed)
+{
+    ScenarioSetup setup = base_setup(seed);
+    for (const auto& [a, base, jitter] :
+         {std::tuple{NodeId::bank_a, SimTimeUs{20'000}, SimTimeUs{19'000}},
+          std::tuple{NodeId::bank_b, SimTimeUs{35'000}, SimTimeUs{30'000}}}) {
+        setup.script.push_back(
+            jitter_link(NodeId::coordinator, a, base, jitter));
+        setup.script.push_back(
+            jitter_link(a, NodeId::coordinator, base, jitter));
+        setup.script.push_back(
+            duplicate(NodeId::coordinator, a, MessageType::prepare));
+        setup.script.push_back(
+            duplicate(NodeId::coordinator, a, MessageType::commit));
+    }
+    setup.script.push_back(submit(0, standard_trade()));
+    return setup;
 }
 
 ScenarioSetup make_s13_lock_conflict(std::uint64_t seed)

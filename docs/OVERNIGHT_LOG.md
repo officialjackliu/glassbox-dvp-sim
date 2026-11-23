@@ -347,3 +347,45 @@ Tests (`scenario_participant_crash_test`):
 
 Mutants: 5/5 killed (crash points swapped between scenarios, restart query removed,
 replayed ledger ignored, coordinator outcome-query reply removed).
+
+## Task 21: S9–S12 coordinator and communication failures
+
+Built:
+- S9 `make_s9_coordinator_crash_after_decision`: coordinator AFTER_LOG_BEFORE_SEND on the
+  2nd VOTE of trade 1 (`occurrence = 2`), restart after 5 s.
+- S10 `make_s10_coordinator_crash_mid_broadcast`: same trigger, AFTER_FIRST_SEND.
+- S11 `make_s11_lost_commit`: `drop_next(COMMIT, COORD→BANK_A)`, decision-wait start 2 s.
+- S12 `make_s12_duplicates_and_reordering`: COORD↔A 20 ms ± 19 ms, COORD↔B 35 ms ± 30 ms,
+  and duplicate the next PREPARE and COMMIT on both coordinator→bank links.
+- `NetworkModel::duplicate_next(from, to, type)` and `ScriptDuplicateNext`: the next
+  matching message is delivered twice; the copy keeps its msg_id and consumes its own
+  jitter + drop draws right after the original's.
+
+Decisions:
+- **S11 changes one dial** (`decision_wait.initial_us = 2 s`). With the defaults, BANK_A's
+  own OUTCOME_QUERY (1 s) resolves the lost COMMIT before the coordinator's retransmit
+  (1 s after its later send time). DESIGN.md says "retransmit delivers it", so S11 makes
+  that the path; the query path is already covered in `protocol_integration_test`.
+- **Duplication** is a new network injector (DESIGN.md §7.2 had only `drop_next`);
+  simplest model of a duplicated packet. A duplicate on a partitioned link is dropped twice.
+
+Tests (`scenario_coordinator_failure_test`):
+- S9: crash at 73,200 with DECISION_COMMIT durable; at 4 s both participants PREPARED with
+  locks held and no COMMIT ever sent (blocking); four OUTCOME_QUERYs dropped NODE_DOWN
+  (1,004,300 / 1,072,300 / 3,004,400 / 3,072,400); restart 5,073,200 → RESEND_DECISION →
+  COMMITs at 5,073,300 → deliveries 5,074,300 / 5,108,300 → END 5,145,400.
+- S10: crash at 73,300 right after the COMMIT to BANK_A; BANK_A committed, BANK_B in doubt
+  at 4 s; drops: A's ACK and B's two queries; restart resends to both (A's copy is a
+  duplicate: one APPLY, two ACKs); END 5,145,500.
+- S11: DROP_NEXT at 74,300; RETRANSMIT to BANK_A only at 1,073,300; COMMIT delivered
+  1,074,400; END 1,077,500; no outcome query.
+- S12 over 300 seeds: always commits with exact balances, no drops, no invalid messages;
+  each bank gets 2 PREPAREs and ≥ 2 COMMITs, locks once and applies once; across seeds
+  both duplicate-PREPARE paths occur (ignored while PREPARING, yes resent after), copies
+  arrive at different times in > 500 of 600 cases; same seed ⇒ same trace.
+- `duplicate_next` unit tests: same msg_id, draw order equals two real sends, one-shot,
+  type / direction / destination matching, partition drops both copies.
+- S9/S10 outcome independent of restart delay (1 ms, 0.9 s, 2 s, 12 s).
+
+Mutants: 7/7 killed after adding a destination-only matching case (the survivor showed the
+`to` check was untested).

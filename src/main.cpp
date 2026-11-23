@@ -18,16 +18,27 @@ int main()
     const auto script_seq = queue.schedule(
         10,
         glassbox::EventKind::script_action,
-        glassbox::ScriptActionEvent{"submit trade"});
+        glassbox::ScriptActionEvent{
+            glassbox::ScriptSetLink{
+                glassbox::NodeId::coordinator,
+                glassbox::NodeId::bank_a,
+                1'000,
+                0,
+                0,
+            },
+        });
     const auto message_seq = queue.schedule(
         20,
         glassbox::EventKind::deliver_message,
         glassbox::DeliverMessageEvent{
-            glassbox::MessageType::prepare,
-            glassbox::NodeId::coordinator,
+            glassbox::Message{
+                41,
+                glassbox::NodeId::coordinator,
+                glassbox::NodeId::bank_a,
+                glassbox::MessageType::prepare,
+                glassbox::TradeId{1},
+            },
             glassbox::NodeId::bank_a,
-            glassbox::TradeId{1},
-            41,
             20,
             21,
             1,

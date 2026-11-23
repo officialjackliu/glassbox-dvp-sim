@@ -33,6 +33,7 @@ endif()
 
 add_executable(glassbox-dvp-sim
     src/main.cpp
+    src/simulator.cpp
 )
 
 target_include_directories(glassbox-dvp-sim PRIVATE include)
@@ -76,3 +77,21 @@ add_executable(network_model_test
 
 target_include_directories(network_model_test PRIVATE include)
 add_test(NAME network_model_test COMMAND network_model_test)
+
+add_executable(simulator_test
+    src/simulator.cpp
+    tests/simulator_test.cpp
+)
+
+target_include_directories(simulator_test PRIVATE include)
+add_test(NAME simulator_test COMMAND simulator_test)
+
+add_executable(node_purity_test
+    tests/node_purity_test.cpp
+)
+
+target_include_directories(node_purity_test PRIVATE include)
+add_test(NAME node_purity_test COMMAND node_purity_test)
+set_tests_properties(node_purity_test PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)

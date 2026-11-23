@@ -8,6 +8,7 @@ int main()
     const char* files[]{
         "include/sim/node.hpp",
         "include/sim/effects.hpp",
+        "include/domain/local_ledger.hpp",
     };
     for (const char* file : files) {
         std::ifstream input{file};
@@ -22,6 +23,13 @@ int main()
                   std::string::npos);
             CHECK(line.find("#include \"sim/simulator.hpp\"") ==
                   std::string::npos);
+            if (std::string{file} ==
+                "include/domain/local_ledger.hpp") {
+                CHECK(line.find("#include \"sim/event_queue.hpp\"") ==
+                      std::string::npos);
+                CHECK(line.find("#include \"sim/effects.hpp\"") ==
+                      std::string::npos);
+            }
         }
     }
     std::ifstream simulator_source{"src/simulator.cpp"};

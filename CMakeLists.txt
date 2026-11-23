@@ -68,3 +68,11 @@ add_executable(deterministic_rng_test
 
 target_include_directories(deterministic_rng_test PRIVATE include)
 add_test(NAME deterministic_rng_test COMMAND deterministic_rng_test)
+
+# Directed-link, partition, node-down, and drop scheduling tests.
+add_executable(network_model_test
+    tests/network_model_test.cpp
+)
+
+target_include_directories(network_model_test PRIVATE include)
+add_test(NAME network_model_test COMMAND network_model_test)

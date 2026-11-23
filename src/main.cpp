@@ -23,9 +23,14 @@ int main()
         20,
         glassbox::EventKind::deliver_message,
         glassbox::DeliverMessageEvent{
-            "PREPARE",
+            glassbox::MessageType::prepare,
             glassbox::NodeId::coordinator,
             glassbox::NodeId::bank_a,
+            glassbox::TradeId{1},
+            41,
+            20,
+            21,
+            1,
         });
     CHECK(script_seq.has_value());
     CHECK(message_seq.has_value());

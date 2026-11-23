@@ -13,6 +13,7 @@
 #include <optional>
 #include <queue>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <utility>
 #include <vector>
@@ -21,6 +22,7 @@ namespace glassbox {
 
 enum class EventKind : std::uint8_t {
     deliver_message,
+    drop_message,
     fire_timer,
     node_crash,
     node_restart,
@@ -33,10 +35,62 @@ enum class TimerKind : std::uint8_t {
     decision_wait,
 };
 
+enum class DropReason : std::uint8_t {
+    random,
+    partition,
+    node_down,
+    next_message,
+};
+
+enum class MessageType : std::uint8_t {
+    propose,
+    prepare,
+    vote,
+    commit,
+    abort,
+    ack,
+    outcome_query,
+};
+
+constexpr std::string_view to_string(MessageType type) noexcept
+{
+    switch (type) {
+    case MessageType::propose:
+        return "PROPOSE";
+    case MessageType::prepare:
+        return "PREPARE";
+    case MessageType::vote:
+        return "VOTE";
+    case MessageType::commit:
+        return "COMMIT";
+    case MessageType::abort:
+        return "ABORT";
+    case MessageType::ack:
+        return "ACK";
+    case MessageType::outcome_query:
+        return "OUTCOME_QUERY";
+    }
+    return "UNKNOWN";
+}
+
 struct DeliverMessageEvent {
-    std::string msg_type;
+    MessageType msg_type;
     NodeId from;
     NodeId to;
+    std::optional<TradeId> trade_id;
+    std::uint64_t msg_id;
+    SimTimeUs sent_at_us;
+    SimTimeUs deliver_at_us;
+    SimTimeUs simulated_latency_us;
+};
+
+struct DropMessageEvent {
+    MessageType msg_type;
+    NodeId from;
+    NodeId to;
+    DropReason reason;
+    SimTimeUs sent_at_us;
+    SimTimeUs deliver_at_us;
 };
 
 struct FireTimerEvent {
@@ -60,6 +114,7 @@ struct ScriptActionEvent {
 using EventPayload = std::variant<
     std::monostate,
     DeliverMessageEvent,
+    DropMessageEvent,
     FireTimerEvent,
     NodeCrashEvent,
     NodeRestartEvent,

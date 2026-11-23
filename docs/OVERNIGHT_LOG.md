@@ -389,3 +389,32 @@ Tests (`scenario_coordinator_failure_test`):
 
 Mutants: 7/7 killed after adding a destination-only matching case (the survivor showed the
 `to` check was untested).
+
+## Task 22: S14 partition and heal
+
+Built: `make_s14_partition(seed)` / `make_s14_with_partition(seed, at, heal)`: BANK_A buys
+from BANK_C; `partition(COORD, BANK_C)` at 122,000 and heal at 2 s via
+`ScriptSetPartition`. Registered S14 (registry now S1–S14 complete).
+
+Decisions:
+- Partitions apply at **send time** (existing NetworkModel semantics from Task 5), so
+  "during voting" means after BANK_C received PREPARE (121,100) and before its yes leaves
+  (122,200). A partition starting after the yes left does not stop it; that boundary is
+  tested (122,201 → the trade commits, with the COMMIT to C delayed until after the heal).
+- No new code in the network or protocol was needed.
+
+Tests (`scenario_partition_test`):
+- During voting: at 1.5 s the coordinator is ABORTING, BANK_A released, BANK_C PREPARED
+  with its lock; drops are exactly VOTE (242,200), ABORT (622,200), OUTCOME_QUERY
+  (1,242,300), ABORT retransmit (1,622,300), all `PARTITION`; after the heal BANK_C's
+  second query (3,122,400) is answered ABORT(VOTE_TIMEOUT) at 3,242,500, BANK_C unlocks at
+  3,362,500, END 3,484,600; the 3,502,300 retransmit finds the trade done.
+- Partition from t=0: PREPARE dropped, no lock, no query; retransmitted ABORT after heal
+  (3,622,400) → tombstone; END 3,744,500.
+- Partition just after the yes left → commit.
+- Heal at 0.6 / 1 / 5 / 20 s → same abort outcome.
+- Partition is never conflated with node-down: no CRASH, no `MSG_DROP_NODE_DOWN`, every
+  `MSG_DROP` reason is PARTITION, all nodes up, only `state_mismatch` timer ignores.
+
+Mutants: 5/5 killed (partition time, never heal, one-directional partition, wrong drop
+reason, trade not involving BANK_C).

@@ -268,3 +268,7 @@ add_test(NAME scenario_participant_crash_test COMMAND scenario_participant_crash
 add_executable(scenario_coordinator_failure_test tests/scenario_coordinator_failure_test.cpp)
 target_link_libraries(scenario_coordinator_failure_test PRIVATE glassbox_core)
 add_test(NAME scenario_coordinator_failure_test COMMAND scenario_coordinator_failure_test)
+
+add_executable(scenario_partition_test tests/scenario_partition_test.cpp)
+target_link_libraries(scenario_partition_test PRIVATE glassbox_core)
+add_test(NAME scenario_partition_test COMMAND scenario_partition_test)

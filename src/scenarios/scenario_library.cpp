@@ -210,4 +210,28 @@ ScenarioSetup make_s13_lock_conflict(std::uint64_t seed)
     return setup;
 }
 
+ScenarioSetup make_s14_with_partition(std::uint64_t seed,
+                                      SimTimeUs partition_at_us,
+                                      SimTimeUs heal_at_us)
+{
+    ScenarioSetup setup = base_setup(seed);
+    setup.script.push_back(
+        submit(0, standard_trade(NodeId::bank_a, NodeId::bank_c)));
+    setup.script.push_back(TimedAction{
+        partition_at_us,
+        ScriptActionEvent{
+            ScriptSetPartition{NodeId::coordinator, NodeId::bank_c, true}}});
+    setup.script.push_back(TimedAction{
+        heal_at_us,
+        ScriptActionEvent{
+            ScriptSetPartition{NodeId::coordinator, NodeId::bank_c, false}}});
+    return setup;
+}
+
+ScenarioSetup make_s14_partition(std::uint64_t seed)
+{
+    return make_s14_with_partition(seed, k_s14_partition_at_us,
+                                   k_s14_heal_at_us);
+}
+
 } // namespace glassbox

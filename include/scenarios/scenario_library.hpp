@@ -94,4 +94,17 @@ inline constexpr SimTimeUs k_s10_restart_after_us = 5'000'000;
 inline constexpr std::int64_t k_s13_seller_bonds = 40;
 [[nodiscard]] ScenarioSetup make_s13_lock_conflict(std::uint64_t seed);
 
+// S14: BANK_A buys from BANK_C. COORD<->BANK_C is partitioned at
+// k_s14_partition_at_us (after BANK_C received PREPARE at 121,100, before its
+// yes leaves at 122,200) and healed at k_s14_heal_at_us. The coordinator
+// times out and aborts; after the heal BANK_C, in doubt, resolves by query.
+// Partitions apply at send time (NetworkModel semantics).
+inline constexpr SimTimeUs k_s14_partition_at_us = 122'000;
+inline constexpr SimTimeUs k_s14_heal_at_us = 2'000'000;
+[[nodiscard]] ScenarioSetup make_s14_partition(std::uint64_t seed);
+[[nodiscard]] ScenarioSetup make_s14_with_partition(
+    std::uint64_t seed,
+    SimTimeUs partition_at_us,
+    SimTimeUs heal_at_us);
+
 } // namespace glassbox

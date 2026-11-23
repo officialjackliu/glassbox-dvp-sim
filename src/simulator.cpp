@@ -30,6 +30,11 @@ Simulator::Simulator(const SimulatorConfig& config, TraceSink& trace_sink)
     epochs_.fill(0);
 }
 
+const SimulatorConfig& Simulator::config() const noexcept
+{
+    return config_;
+}
+
 void Simulator::set_node(NodeId node, std::unique_ptr<Node> implementation)
 {
     nodes_[node_index(node)] = std::move(implementation);

@@ -57,6 +57,8 @@ class Simulator {
   public:
     Simulator(const SimulatorConfig& config, TraceSink& trace_sink);
 
+    [[nodiscard]] const SimulatorConfig& config() const noexcept;
+
     void set_node(NodeId node, std::unique_ptr<Node> implementation);
     [[nodiscard]] Node* node(NodeId node) noexcept;
     [[nodiscard]] const Node* node(NodeId node) const noexcept;

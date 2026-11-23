@@ -25,6 +25,8 @@ through its tests and code review.
 - `include/sim/network_model.hpp` owns directed links, partitions, node-down
   state, next-message drops, and random delivery scheduling. Default regional
   values are illustrative placeholders and every directed link is configurable.
+  Node-down inbound state is checked when scheduling and must be rechecked
+  by the future simulator loop when a deliver event is popped.
 - `src/main.cpp` is the integration smoke executable. It constructs core values,
   schedules two events, steps them through virtual time, and emits a synthetic
   trace line.

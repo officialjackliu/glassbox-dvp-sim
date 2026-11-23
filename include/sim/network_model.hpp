@@ -12,8 +12,6 @@
 #include <array>
 #include <cstdint>
 #include <optional>
-#include <string>
-#include <string_view>
 #include <vector>
 
 namespace glassbox {
@@ -30,10 +28,19 @@ struct LinkConfig {
 struct NextDrop {
     NodeId from;
     NodeId to;
-    std::optional<std::string> message_type;
+    std::optional<MessageType> message_type;
+};
+
+enum class NetworkScheduleStatus : std::uint8_t {
+    scheduled,
+    dropped,
+    invalid_send_time,
+    delivery_time_overflow,
+    event_queue_failure,
 };
 
 struct NetworkScheduleResult {
+    NetworkScheduleStatus status = NetworkScheduleStatus::event_queue_failure;
     bool delivered = false;
     std::optional<DropReason> drop_reason;
     std::optional<SequenceId> event_seq;
@@ -50,19 +57,19 @@ class NetworkModel {
             for (std::size_t j = 0; j < k_node_count; ++j) {
                 link_[i][j] =
                     i == j
-                        ? LinkConfig{1, 0, 0}
+                        ? LinkConfig{1'000, 0, 0}
                         : LinkConfig{35'000, 0, 0};
             }
         }
 
         // Placeholder regional defaults:
         // NY=COORD/BANK_A, London=BANK_B, Singapore=BANK_C.
-        set_link(NodeId::coordinator, NodeId::coordinator, LinkConfig{1, 0, 0});
-        set_link(NodeId::bank_a, NodeId::bank_a, LinkConfig{1, 0, 0});
-        set_link(NodeId::bank_b, NodeId::bank_b, LinkConfig{1, 0, 0});
-        set_link(NodeId::bank_c, NodeId::bank_c, LinkConfig{1, 0, 0});
-        set_link(NodeId::coordinator, NodeId::bank_a, LinkConfig{1, 0, 0});
-        set_link(NodeId::bank_a, NodeId::coordinator, LinkConfig{1, 0, 0});
+        set_link(NodeId::coordinator, NodeId::coordinator, LinkConfig{1'000, 0, 0});
+        set_link(NodeId::bank_a, NodeId::bank_a, LinkConfig{1'000, 0, 0});
+        set_link(NodeId::bank_b, NodeId::bank_b, LinkConfig{1'000, 0, 0});
+        set_link(NodeId::bank_c, NodeId::bank_c, LinkConfig{1'000, 0, 0});
+        set_link(NodeId::coordinator, NodeId::bank_a, LinkConfig{1'000, 0, 0});
+        set_link(NodeId::bank_a, NodeId::coordinator, LinkConfig{1'000, 0, 0});
 
         set_link(NodeId::coordinator, NodeId::bank_b, LinkConfig{35'000, 0, 0});
         set_link(NodeId::bank_b, NodeId::coordinator, LinkConfig{35'000, 0, 0});
@@ -85,7 +92,9 @@ class NetworkModel {
         const LinkConfig normalized{
             config.base_latency_us < 1 ? 1 : config.base_latency_us,
             config.jitter_us < 0 ? 0 : config.jitter_us,
-            config.drop_probability_ppm,
+            config.drop_probability_ppm > 1'000'000
+                ? 1'000'000
+                : config.drop_probability_ppm,
         };
         link_[node_index(from)][node_index(to)] = normalized;
     }
@@ -116,32 +125,41 @@ class NetworkModel {
         return node_down_[node_index(node)];
     }
 
-    // Removes and drops the next matching message. An empty message_type
-    // matches the next message in either direction pair, regardless of type.
-    void drop_next(NodeId from, NodeId to,
-                   std::string_view message_type = {}) 
+    // Removes and drops the next matching message on this directed from->to
+    // link. The wildcard overload matches the next message of any type.
+    void drop_next(NodeId from, NodeId to, MessageType message_type)
     {
         next_drops_.push_back(
             NextDrop{
                 from,
                 to,
-                message_type.empty()
-                    ? std::optional<std::string>{std::nullopt}
-                    : std::optional<std::string>{std::string{message_type}},
+                message_type,
             });
+    }
+
+    void drop_next(NodeId from, NodeId to)
+    {
+        next_drops_.push_back(NextDrop{from, to, std::nullopt});
     }
 
     // Called by send-side simulator code. It always consumes the configured
     // jitter and PPM drop draws before applying non-random fault precedence.
+    // node_down(to) is a send-time check in this component. Task 6's event loop
+    // must re-check the destination when a deliver_message event is popped;
+    // that arrival-time check handles nodes crashing or restarting mid-flight.
     [[nodiscard]] NetworkScheduleResult schedule_delivery(
         EventQueue& queue,
         SimTimeUs send_time_us,
         NodeId from,
         NodeId to,
-        std::string_view message_type)
+        MessageType message_type,
+        std::uint64_t msg_id = 0,
+        std::optional<TradeId> trade_id = std::nullopt)
     {
         if (send_time_us < 0) {
-            return {false, std::nullopt, std::nullopt, send_time_us, 0};
+            return {NetworkScheduleStatus::invalid_send_time,
+                    false, std::nullopt, std::nullopt,
+                    send_time_us, 0};
         }
 
         const LinkConfig& config = link(from, to);
@@ -155,7 +173,8 @@ class NetworkModel {
         const auto deliver_at =
             checked_add_i64(send_time_us, random_draw.latency_us);
         if (!deliver_at) {
-            return {false, DropReason::random, std::nullopt,
+            return {NetworkScheduleStatus::delivery_time_overflow,
+                    false, std::nullopt, std::nullopt,
                     send_time_us, 0};
         }
 
@@ -187,14 +206,15 @@ class NetworkModel {
                 *deliver_at,
                 EventKind::drop_message,
                 DropMessageEvent{
-                    std::string{message_type},
+                    message_type,
                     from,
                     to,
                     *reason,
                     send_time_us,
                     *deliver_at,
                 });
-            return {false, reason, seq,
+            return {NetworkScheduleStatus::dropped,
+                    false, reason, seq,
                     send_time_us, *deliver_at};
         }
 
@@ -202,18 +222,22 @@ class NetworkModel {
             *deliver_at,
             EventKind::deliver_message,
             DeliverMessageEvent{
-                std::string{message_type},
+                message_type,
                 from,
                 to,
+                trade_id,
+                msg_id,
                 send_time_us,
                 *deliver_at,
                 random_draw.latency_us,
             });
         if (!seq) {
-            return {false, DropReason::random, std::nullopt,
+            return {NetworkScheduleStatus::event_queue_failure,
+                    false, std::nullopt, std::nullopt,
                     send_time_us, *deliver_at};
         }
-        return {true, std::nullopt, seq,
+        return {NetworkScheduleStatus::scheduled,
+                true, std::nullopt, seq,
                 send_time_us, *deliver_at};
     }
 

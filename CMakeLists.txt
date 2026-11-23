@@ -49,10 +49,19 @@ add_library(glassbox_core STATIC
 )
 target_include_directories(glassbox_core PUBLIC include)
 
+# Front end: the glass-box terminal player. It reads the core through its
+# public API and never changes it.
+add_library(glassbox_cli STATIC
+    src/cli/recording.cpp
+    src/cli/narrator.cpp
+)
+target_include_directories(glassbox_cli PUBLIC include)
+target_link_libraries(glassbox_cli PUBLIC glassbox_core)
+
 add_executable(glassbox-dvp-sim
     src/main.cpp
 )
-target_link_libraries(glassbox-dvp-sim PRIVATE glassbox_core)
+target_link_libraries(glassbox-dvp-sim PRIVATE glassbox_cli)
 target_include_directories(glassbox-dvp-sim PRIVATE include)
 
 enable_testing()
@@ -277,3 +286,11 @@ add_test(NAME scenario_partition_test COMMAND scenario_partition_test)
 add_executable(invariant_checker_test tests/invariant_checker_test.cpp)
 target_link_libraries(invariant_checker_test PRIVATE glassbox_core)
 add_test(NAME invariant_checker_test COMMAND invariant_checker_test)
+
+add_executable(cli_recording_test tests/cli_recording_test.cpp)
+target_link_libraries(cli_recording_test PRIVATE glassbox_cli)
+add_test(NAME cli_recording_test COMMAND cli_recording_test)
+
+add_executable(cli_narrator_test tests/cli_narrator_test.cpp)
+target_link_libraries(cli_narrator_test PRIVATE glassbox_cli)
+add_test(NAME cli_narrator_test COMMAND cli_narrator_test)

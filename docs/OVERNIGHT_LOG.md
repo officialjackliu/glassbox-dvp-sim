@@ -148,3 +148,34 @@ coordinator was not checked; the wiring test was added.
 Uncertain / follow-up: a stuck protocol makes `Simulator::run()` loop forever (there is
 no event or time bound). Fine for correct code, but a bounded run would make failing
 tests fail fast instead of hanging.
+
+## Task 15: S1 happy path, scenario registry, minimal CLI
+
+Built:
+- `include/scenarios/scenario.hpp`: `ScenarioSetup {config, genesis, script}`,
+  `TimedAction`, `ScenarioInfo {id, name, make(seed)}`, `scenario_registry()`,
+  `find_scenario()`, and `ScenarioRun` (builds simulator + protocol nodes, schedules the
+  script in order, keeps the full trace, optional echo sink). Shared defaults:
+  1,000,000.00 cash and 25,000 bonds per bank; standard trade BANK_A buys 25 UST_10Y from
+  BANK_B for 24,875.00, deadline 30 s after submission.
+- `include/scenarios/scenario_library.hpp`: `make_s1_happy_path(seed)`.
+- `Simulator::run_bounded(max_events)` → true on quiescence (scenario runs default to
+  1,000,000 events, so a stuck protocol fails instead of hanging).
+- `include/trace/trace_format.hpp`: one-line trace rendering for the CLI; never prints
+  `measured_ns`.
+- `src/main.cpp` replaced by the minimal CLI decided in CLAUDE.md: `--list`,
+  `--scenario S1 [--seed N]`, one line per trace record, then final node states and
+  `quiesced=yes|no`. Exit 0 / 2 (usage) / 3 (bound hit).
+- CMake: new `glassbox_core` static library (all sources except `main.cpp`); new
+  targets link it. Older test targets keep their explicit source lists (unchanged).
+
+Decisions:
+- Scenario outcomes are asserted in tests, not encoded in the registry (registry is data).
+- CLI output has no swimlane formatting yet (Task 26).
+
+Tests: `scenario_s1_test` (registry lookups incl. near-misses, defaults, S1 outcome with
+exact balances and invariants 1–5, the full protocol-visible trace sequence with times
+derived by hand from the latency/processing/flush constants, timer bookkeeping, 20 seeds
+identical, exact `format_trace_line` strings, `run_bounded` boundary at exactly N events);
+CLI ctests: `--list`, S1 quiesced, exact final BANK_A line, a specific trace line,
+unknown scenario / bad seed / no args fail. Mutants: 12/12 killed.

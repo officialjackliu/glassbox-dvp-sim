@@ -73,6 +73,9 @@ class Simulator {
     [[nodiscard]] SimTimeUs now_us() const noexcept;
     [[nodiscard]] bool step();
     void run();
+    // Processes at most max_events events. Returns true if the queue drained
+    // (quiescence), false if the bound was hit first.
+    [[nodiscard]] bool run_bounded(std::size_t max_events);
 
     [[nodiscard]] std::optional<SequenceId> schedule_script(
         SimTimeUs time,

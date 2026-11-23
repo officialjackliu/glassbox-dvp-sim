@@ -31,8 +31,8 @@ if(GLASSBOX_ENABLE_UBSAN)
     add_link_options(-fsanitize=undefined)
 endif()
 
-add_executable(glassbox-dvp-sim
-    src/main.cpp
+# Core library: everything except the CLI entry point.
+add_library(glassbox_core STATIC
     src/simulator.cpp
     src/domain/local_ledger.cpp
     src/domain/trade.cpp
@@ -42,8 +42,16 @@ add_executable(glassbox-dvp-sim
     src/protocol/coordinator.cpp
     src/protocol/participant.cpp
     src/scenarios/protocol_system.cpp
+    src/scenarios/scenario.cpp
+    src/scenarios/scenario_library.cpp
+    src/trace/trace_format.cpp
 )
+target_include_directories(glassbox_core PUBLIC include)
 
+add_executable(glassbox-dvp-sim
+    src/main.cpp
+)
+target_link_libraries(glassbox-dvp-sim PRIVATE glassbox_core)
 target_include_directories(glassbox-dvp-sim PRIVATE include)
 
 enable_testing()
@@ -214,3 +222,25 @@ add_executable(protocol_integration_test
 )
 target_include_directories(protocol_integration_test PRIVATE include)
 add_test(NAME protocol_integration_test COMMAND protocol_integration_test)
+
+add_executable(scenario_s1_test tests/scenario_s1_test.cpp)
+target_link_libraries(scenario_s1_test PRIVATE glassbox_core)
+add_test(NAME scenario_s1_test COMMAND scenario_s1_test)
+
+# CLI smoke tests (minimal runner, Task 15).
+add_test(NAME cli_list COMMAND glassbox-dvp-sim --list)
+set_tests_properties(cli_list PROPERTIES PASS_REGULAR_EXPRESSION "S1  Happy path")
+add_test(NAME cli_s1 COMMAND glassbox-dvp-sim --scenario S1 --seed 1)
+set_tests_properties(cli_s1 PROPERTIES PASS_REGULAR_EXPRESSION "scenario=S1 seed=1 quiesced=yes")
+add_test(NAME cli_s1_final_state COMMAND glassbox-dvp-sim --scenario S1 --seed 7)
+set_tests_properties(cli_s1_final_state PROPERTIES PASS_REGULAR_EXPRESSION
+    "final BANK_A cash_total=97512500 cash_locked=0 bonds_total=25025 bonds_locked=0 trade1=COMMITTED")
+add_test(NAME cli_s1_trace_line COMMAND glassbox-dvp-sim --scenario S1)
+set_tests_properties(cli_s1_trace_line PROPERTIES PASS_REGULAR_EXPRESSION
+    "t=144400 STATE_CHANGE COORD trade=1 detail=COMMITTING->DONE @Coordinator::on_ack")
+add_test(NAME cli_unknown_scenario COMMAND glassbox-dvp-sim --scenario S99)
+set_tests_properties(cli_unknown_scenario PROPERTIES WILL_FAIL TRUE)
+add_test(NAME cli_bad_seed COMMAND glassbox-dvp-sim --scenario S1 --seed x1)
+set_tests_properties(cli_bad_seed PROPERTIES WILL_FAIL TRUE)
+add_test(NAME cli_no_args COMMAND glassbox-dvp-sim)
+set_tests_properties(cli_no_args PROPERTIES WILL_FAIL TRUE)

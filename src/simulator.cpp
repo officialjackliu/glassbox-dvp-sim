@@ -363,6 +363,16 @@ void Simulator::run()
     while (step()) {}
 }
 
+bool Simulator::run_bounded(std::size_t max_events)
+{
+    for (std::size_t i = 0; i < max_events; ++i) {
+        if (!step()) {
+            return true;
+        }
+    }
+    return queue_.empty();
+}
+
 void Simulator::dispatch(const Event& event)
 {
     switch (event.kind) {

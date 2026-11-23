@@ -37,5 +37,31 @@ int main()
         CHECK(*delay >= 1'000);
         CHECK(*delay <= 8'000);
     }
+
+    // Large range verifies the doubling loop continues well beyond 63.
+    glassbox::BackoffPolicy large{1, 1'000'000'000'000};
+    CHECK(glassbox::validate(large));
+    CHECK(glassbox::backoff_delay_us(large, 39).value_or(-1) ==
+          549'755'813'888);
+    CHECK(glassbox::backoff_delay_us(large, 40).value_or(-1) ==
+          1'000'000'000'000);
+    CHECK(glassbox::backoff_delay_us(large, 41).value_or(-1) ==
+          1'000'000'000'000);
+
+    // Near INT64_MAX verifies the max/2 guard and final cap.
+    glassbox::BackoffPolicy extreme{
+        1,
+        std::numeric_limits<glassbox::SimTimeUs>::max(),
+    };
+    CHECK(glassbox::validate(extreme));
+    for (std::uint32_t attempt : {40u, 62u,
+                                  std::numeric_limits<std::uint32_t>::max()}) {
+        const auto delay =
+            glassbox::backoff_delay_us(extreme, attempt);
+        CHECK(delay.has_value());
+        CHECK(*delay >= 1);
+        CHECK(*delay <=
+              std::numeric_limits<glassbox::SimTimeUs>::max());
+    }
     return 0;
 }

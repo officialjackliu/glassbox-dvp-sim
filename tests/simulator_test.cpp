@@ -427,6 +427,21 @@ int main()
         CHECK(rejected);
     }
 
+    {
+        CollectorSink sink;
+        glassbox::SimulatorConfig config;
+        config.timers.decision_wait =
+            glassbox::BackoffPolicy{9'000, 8'000};
+        bool rejected = false;
+        try {
+            glassbox::Simulator simulator{config, sink};
+            static_cast<void>(simulator);
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        CHECK(rejected);
+    }
+
     // Effect timing: no logs adds processing only; logs add flush.
     {
         CollectorSink sink;
@@ -530,6 +545,7 @@ int main()
 
         bool found_no_log = false;
         bool found_with_log = false;
+        bool timer_set = false;
         while (const auto event = simulator.events().pop()) {
             if (event->kind == glassbox::EventKind::fire_timer) {
                 found_no_log =
@@ -538,8 +554,14 @@ int main()
                     found_with_log || event->time_us == 1'650;
             }
         }
+        for (const glassbox::TraceRecord& record : sink.records) {
+            if (record.kind == "TIMER_SET") {
+                timer_set = true;
+            }
+        }
         CHECK(found_no_log);
         CHECK(found_with_log);
+        CHECK(timer_set);
     }
 
     // Delay under 1 and arithmetic overflow produce TIMER_REJECTED.
@@ -556,10 +578,11 @@ int main()
                 glassbox::TradeState::none,
                 0,
             });
-        CHECK(simulator.apply_effects(
+        const auto invalid_result = simulator.apply_effects(
                   glassbox::NodeId::coordinator,
                   invalid,
-                  0).has_value());
+                  0);
+        CHECK(invalid_result.has_value());
 
         glassbox::Effects overflow;
         overflow.timers.push_back(
@@ -570,19 +593,29 @@ int main()
                 glassbox::TradeState::none,
                 0,
             });
-        CHECK(simulator.apply_effects(
+        const auto overflow_result = simulator.apply_effects(
                   glassbox::NodeId::coordinator,
                   overflow,
-                  std::numeric_limits<glassbox::SimTimeUs>::max() - 1'000)
-                  .has_value());
+                  std::numeric_limits<glassbox::SimTimeUs>::max() - 1'000);
+        CHECK(overflow_result.has_value());
 
         bool rejected = false;
+        bool invalid_delay_reason = false;
+        bool overflow_reason = false;
         for (const glassbox::TraceRecord& record : sink.records) {
             if (record.kind == "TIMER_REJECTED") {
                 rejected = true;
+                if (record.reason == "invalid_delay") {
+                    invalid_delay_reason = true;
+                }
+                if (record.reason == "overflow") {
+                    overflow_reason = true;
+                }
             }
         }
         CHECK(rejected);
+        CHECK(invalid_delay_reason);
+        CHECK(overflow_reason);
     }
 
     // Property: every released send occurs at or after its batch log flush.

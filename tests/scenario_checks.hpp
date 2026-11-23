@@ -4,10 +4,12 @@
 // 1-5). Task 23 adds the reusable InvariantChecker; these helpers keep the
 // scenario tests readable.
 
+#include "scenarios/invariant_checker.hpp"
 #include "scenarios/scenario.hpp"
 #include "check.hpp"
 
 #include <array>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <vector>
@@ -102,12 +104,23 @@ inline void run_until(glassbox::ScenarioRun& run, glassbox::SimTimeUs time)
     return out;
 }
 
+// Invariants 1-5 at quiescence. Runs the reusable InvariantChecker (Task 23)
+// and, independently, the direct checks below:
 // Invariants 2-5 at quiescence: conservation including locked balances,
 // no negative balances / locked <= total, no leaked locks, no
 // INVARIANT_VIOLATION events. Invariant 1 (atomicity) over every trade the
 // coordinator ever proposed.
 inline void check_quiescent_invariants(const glassbox::ScenarioRun& run)
 {
+    const auto violations = glassbox::check_invariants(
+        glassbox::snapshot(run), glassbox::CheckMode::quiescent);
+    for (const glassbox::InvariantViolation& v : violations) {
+        std::fprintf(stderr, "invariant %s: %s\n",
+                     std::string{glassbox::to_string(v.kind)}.c_str(),
+                     v.detail.c_str());
+    }
+    CHECK(violations.empty());
+
     const glassbox::BankGenesis& g = run.genesis();
     const std::array<glassbox::LocalLedger, 3> before{g.bank_a, g.bank_b,
                                                       g.bank_c};

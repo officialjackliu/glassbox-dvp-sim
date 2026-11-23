@@ -44,6 +44,7 @@ add_library(glassbox_core STATIC
     src/scenarios/protocol_system.cpp
     src/scenarios/scenario.cpp
     src/scenarios/scenario_library.cpp
+    src/scenarios/invariant_checker.cpp
     src/trace/trace_format.cpp
 )
 target_include_directories(glassbox_core PUBLIC include)
@@ -272,3 +273,7 @@ add_test(NAME scenario_coordinator_failure_test COMMAND scenario_coordinator_fai
 add_executable(scenario_partition_test tests/scenario_partition_test.cpp)
 target_link_libraries(scenario_partition_test PRIVATE glassbox_core)
 add_test(NAME scenario_partition_test COMMAND scenario_partition_test)
+
+add_executable(invariant_checker_test tests/invariant_checker_test.cpp)
+target_link_libraries(invariant_checker_test PRIVATE glassbox_core)
+add_test(NAME invariant_checker_test COMMAND invariant_checker_test)

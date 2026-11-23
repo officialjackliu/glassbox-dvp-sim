@@ -418,3 +418,69 @@ Tests (`scenario_partition_test`):
 
 Mutants: 5/5 killed (partition time, never heal, one-directional partition, wrong drop
 reason, trade not involving BANK_C).
+
+## Task 23: global invariant checker
+
+Built `include/scenarios/invariant_checker.hpp`:
+- `SystemSnapshot` of plain integers (`BalanceView` per bank for genesis and current, per-bank
+  trade states, `TradeTerms` from the coordinator's durable PROPOSED records, count of
+  INVARIANT_VIOLATION trace events), built read-only by `snapshot(const ScenarioRun&)`.
+- `check_invariants(snapshot, CheckMode)` is pure and returns `InvariantViolation{kind, node?,
+  trade_id?, detail}` in a fixed order.
+  - **anytime:** non-negative balances (totals and locks); locked ≤ total; lock accounting
+    (each bank's locks equal the legs of its PREPARING/PREPARED trades); conservation of
+    totals *including locked* against genesis plus the legs committed so far; no trade
+    COMMITTED at one party and ABORTED at the other; no INVARIANT_VIOLATION events.
+  - **quiescent:** all of that, plus atomicity (exactly-one-committed is a violation) and
+    leaked locks. All sums use `checked_add_i64` (overflow → `ARITHMETIC_OVERFLOW`).
+- `tests/scenario_checks.hpp::check_quiescent_invariants` now also runs the checker, so
+  **every scenario test (S1–S14) invokes it**; the older direct checks were kept, not
+  replaced.
+
+Decisions:
+- The snapshot uses plain integers, not `LocalLedger`, so the checker is independent of
+  the ledger's own guarantees and synthetic bad states (negative balances, locked > total)
+  can be fed in. Lock accounting and anytime conservation are stronger than DESIGN.md's
+  list but follow directly from it.
+
+Tests (`invariant_checker_test`): valid commit/abort/never-started/refused states pass;
+in-flight states pass anytime but not quiescent; exact kinds and details for split outcomes
+(both directions), one-sided commits, ±1 cash and bonds conservation errors, negative
+totals and negative locks, the locked == total vs total − 1 boundary, stray and missing
+locks, two trades locking at one bank, invariant events, overflow, and a seven-violation
+case in fixed order; the snapshot is side-effect free and reads a run exactly; every
+registry scenario × seeds 1–3 passes at quiescence; **every scenario passes the anytime
+check after every single event** (incl. crashes and half-committed trades); S6 with no
+restart is flagged `ATOMICITY: BANK_A NONE, BANK_B COMMITTED` at "quiescence" but is legal
+anytime. Mutants: 19/19 killed (one survivor showed negative locks were untested; cases
+added).
+
+Test fixes during development (new tests only): removed two meaningless `== false`
+comparisons I had written; corrected three expectations after printing actual output
+(a split outcome breaks only atomicity, since conservation counts committed legs; a
+negative total also trips locked > total; exact multi-violation list).
+
+---
+
+## End-of-run summary
+
+Stopped after Task 23 as instructed (no HTTP/frontend work, nothing pushed to `main`).
+
+Commits on `claude_vibe_code` since branching from Task 10 (`4d055d1`):
+Task 11 `9b12b7d`, 12 `7433742`, 13 `9c35c3d`, 14 `2838ba2`, 15 `fcea7f0`,
+16 `c7906f3`, 17 `156a1b0`, 18 `864f376`, 19 `d86cefd`, 20 `e247625`, 21 `16ad121`,
+22 `84e747d`, 23 (this commit). Tasks 11–13 use the older "Implement Task N" message
+style (written before the "Task N:" instruction); not rewritten, to avoid force-pushing.
+
+Please review:
+1. **ASan never ran** (toolchain hangs on an empty program). Run the three CLAUDE.md
+   commands after reinstalling the Command Line Tools.
+2. Design additions not in DESIGN.md: `Node::on_log_durable` (Task 11), CrashSpec
+   `occurrence` (Task 19), `duplicate_next` injector (Task 21), simulator-assigned msg_ids
+   (Task 11), message-body summary in trace `detail` (Task 16), `run_bounded` (Task 15).
+3. Modeling choices: freeze as a genesis flag (S3), S11 sets decision-wait to 2 s,
+   partitions at send time (S14), vote-no writes a tombstone (Task 13).
+4. Older test targets still list sources explicitly; new ones link `glassbox_core`.
+5. Leftovers from CLAUDE.md still open: `emit_trace` ignores `seq`; the single-timer-site
+   grep depends on indentation; document node_down vs crash timer semantics in §7.2;
+   `Simulator::run()` itself is unbounded (scenarios use `run_bounded`).

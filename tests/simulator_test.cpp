@@ -3,11 +3,33 @@
 
 #include <array>
 #include <random>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace {
+
+[[nodiscard]] glassbox::Trade make_test_trade(glassbox::TradeId id)
+{
+    glassbox::TradeIdAllocator allocator;
+    if (id.value() > 1) {
+        allocator.observe(glassbox::TradeId{id.value() - 1});
+    }
+    glassbox::TradeRequest request{
+        glassbox::NodeId::bank_a,
+        glassbox::NodeId::bank_b,
+        "UST_10Y",
+        glassbox::Units{10},
+        glassbox::Cents{100},
+        100'000,
+        "test",
+    };
+    glassbox::TradeResult result =
+        glassbox::validate_and_assign(request, 0, allocator);
+    return std::get<glassbox::Trade>(result);
+}
 
 class CollectorSink : public glassbox::TraceSink {
   public:
@@ -29,7 +51,7 @@ class DummyNode : public glassbox::Node {
         glassbox::Effects effects;
         if (produce_log) {
             effects.logs.push_back(
-                glassbox::LogRecord{"DUMMY_RECORD", std::nullopt});
+                glassbox::Proposed{make_test_trade(glassbox::TradeId{1})});
         }
         if (produce_send) {
             effects.sends.push_back(
@@ -83,7 +105,7 @@ class DummyNode : public glassbox::Node {
     }
 
     glassbox::Effects on_restart(
-        const std::vector<glassbox::LogRecord>& durable_log,
+        std::span<const glassbox::LogEntry> durable_log,
         glassbox::SimTimeUs) override
     {
         ++restart_calls;
@@ -93,7 +115,7 @@ class DummyNode : public glassbox::Node {
         if (produce_restart_effect) {
             glassbox::Effects effects;
             effects.logs.push_back(
-                glassbox::LogRecord{"RESTART_RECORD", std::nullopt});
+                glassbox::Proposed{make_test_trade(glassbox::TradeId{2})});
             effects.sends.push_back(
                 glassbox::Outgoing{
                     glassbox::Message{
@@ -475,7 +497,10 @@ int main()
 
         glassbox::Effects with_log;
         with_log.logs.push_back(
-            glassbox::LogRecord{"PREPARED", std::nullopt});
+            glassbox::Prepared{
+                make_test_trade(glassbox::TradeId{3}),
+                glassbox::Leg::buyer,
+            });
         with_log.sends.push_back(
             glassbox::Outgoing{
                 glassbox::Message{
@@ -529,7 +554,9 @@ int main()
                   500).has_value());
         glassbox::Effects with_log;
         with_log.logs.push_back(
-            glassbox::LogRecord{"TIMER_LOG", std::nullopt});
+            glassbox::Proposed{
+                make_test_trade(glassbox::TradeId{4}),
+            });
         with_log.timers.push_back(
             glassbox::TimerRequest{
                 50,
@@ -632,7 +659,9 @@ int main()
             glassbox::Effects effects;
             if (random() % 2 == 0) {
                 effects.logs.push_back(
-                    glassbox::LogRecord{"RECORD", std::nullopt});
+                    glassbox::Proposed{
+                        make_test_trade(glassbox::TradeId{5}),
+                    });
             }
             effects.sends.push_back(
                 glassbox::Outgoing{
@@ -742,7 +771,10 @@ int main()
 
         glassbox::Effects effects;
         effects.logs.push_back(
-            glassbox::LogRecord{"BEFORE_CRASH", std::nullopt});
+            glassbox::Prepared{
+                make_test_trade(glassbox::TradeId{6}),
+                glassbox::Leg::buyer,
+            });
         effects.sends.push_back(
             glassbox::Outgoing{
                 glassbox::Message{

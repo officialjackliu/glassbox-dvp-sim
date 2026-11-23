@@ -6,17 +6,13 @@
 
 #include "sim/core_types.hpp"
 #include "sim/event_queue.hpp"
+#include "domain/log_records.hpp"
 
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace glassbox {
-
-struct LogRecord {
-    std::string kind;
-    std::optional<TradeId> trade_id;
-};
 
 struct Outgoing {
     Message message;

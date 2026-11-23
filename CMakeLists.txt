@@ -36,6 +36,8 @@ add_executable(glassbox-dvp-sim
     src/simulator.cpp
     src/domain/local_ledger.cpp
     src/domain/trade.cpp
+    src/domain/durable_log.cpp
+    src/domain/replay.cpp
 )
 
 target_include_directories(glassbox-dvp-sim PRIVATE include)
@@ -82,6 +84,10 @@ add_test(NAME network_model_test COMMAND network_model_test)
 
 add_executable(simulator_test
     src/simulator.cpp
+    src/domain/local_ledger.cpp
+    src/domain/trade.cpp
+    src/domain/durable_log.cpp
+    src/domain/replay.cpp
     tests/simulator_test.cpp
 )
 
@@ -124,5 +130,29 @@ add_executable(trade_test
 target_include_directories(trade_test PRIVATE include)
 add_test(NAME trade_test COMMAND trade_test)
 set_tests_properties(trade_test PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(durable_log_test
+    src/domain/trade.cpp
+    src/domain/durable_log.cpp
+    tests/durable_log_test.cpp
+)
+target_include_directories(durable_log_test PRIVATE include)
+add_test(NAME durable_log_test COMMAND durable_log_test)
+set_tests_properties(durable_log_test PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(replay_test
+    src/domain/local_ledger.cpp
+    src/domain/trade.cpp
+    src/domain/durable_log.cpp
+    src/domain/replay.cpp
+    tests/replay_test.cpp
+)
+target_include_directories(replay_test PRIVATE include)
+add_test(NAME replay_test COMMAND replay_test)
+set_tests_properties(replay_test PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

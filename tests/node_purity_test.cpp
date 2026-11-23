@@ -10,6 +10,12 @@ int main()
         "include/sim/effects.hpp",
         "include/domain/local_ledger.hpp",
         "include/domain/trade.hpp",
+        "include/domain/log_records.hpp",
+        "include/domain/durable_log.hpp",
+        "include/domain/replay.hpp",
+        "include/domain/log_records.hpp",
+        "include/domain/durable_log.hpp",
+        "include/domain/replay.hpp",
     };
     for (const char* file : files) {
         std::ifstream input{file};

@@ -4,6 +4,8 @@
 // network, RNG, clock, event queue, simulator, or peer-node dependencies.
 
 #include "sim/effects.hpp"
+#include "domain/durable_log.hpp"
+#include <span>
 
 namespace glassbox {
 
@@ -28,7 +30,7 @@ class Node {
         TradeId trade_id) const = 0;
     virtual void on_crash() = 0;
     [[nodiscard]] virtual Effects on_restart(
-        const std::vector<LogRecord>& durable_log,
+        std::span<const LogEntry> durable_log,
         SimTimeUs now) = 0;
 };
 

@@ -97,7 +97,7 @@ class Node {
   virtual Effects on_message(const Message&, SimTimeUs now) = 0;
   virtual Effects on_timer(const TimerEvent&, SimTimeUs now) = 0;
   virtual void    on_crash() = 0;                 // wipe volatile state
-  virtual Effects on_restart(const std::vector<LogRecord>& durable_log,
+  virtual Effects on_restart(std::span<const LogEntry> durable_log,
                              SimTimeUs now) = 0;
 };
 ```
@@ -171,6 +171,7 @@ Vote/abort reason codes: `INSUFFICIENT_FUNDS`, `INSUFFICIENT_BONDS`, `ACCOUNT_FR
 ### 5.2 Durable log records
 | Node | Record | Written when |
 |---|---|---|
+| Coordinator | `PROPOSED{trade}` | when assigning a trade ID and before sending PREPARE |
 | Participant | `PREPARED{trade, leg, locked_amount}` | after locking, before voting yes |
 | Participant | `COMMITTED{trade, cash_delta, bond_delta}` | after applying commit |
 | Participant | `ABORTED{trade}` | after releasing a lock on abort (also written as a tombstone, see 6.3) |
@@ -180,6 +181,7 @@ Vote/abort reason codes: `INSUFFICIENT_FUNDS`, `INSUFFICIENT_BONDS`, `ACCOUNT_FR
 
 **Presumed abort:** if the coordinator has no `DECISION_COMMIT` for a trade, the answer is ABORT. This is safe because a commit decision is always logged before it is announced.
 The coordinator never garbage-collects decision records in v1 (`END` only stops retransmission).
+`PROPOSED{trade}` is logged before PREPARE leaves the coordinator. It records the assigned trade ID durably, preventing an in-doubt participant from receiving a reused ID after a coordinator crash in COLLECTING.
 
 ### 5.3 Coordinator state machine (per trade)
 
@@ -187,7 +189,7 @@ States: `COLLECTING`, `COMMITTING`, `ABORTING`, `DONE`. (Volatile; reconstructed
 
 | Event | State | Action |
 |---|---|---|
-| `PROPOSE` | none | Validate (nodes exist, qty > 0, deadline in future). Invalid: trace `REJECTED`, stop. Else assign `trade_id`, send `PREPARE` to buyer and seller, set `VOTE_TIMEOUT`, state → `COLLECTING`. |
+| `PROPOSE` | none | Validate (nodes exist, qty > 0, deadline in future). Invalid: trace `REJECTED`, stop. Else assign `trade_id`, log `PROPOSED`, send `PREPARE` to buyer and seller, set `VOTE_TIMEOUT`, state → `COLLECTING`. |
 | `VOTE yes` | `COLLECTING` | Record. If both yes: log `DECISION_COMMIT`, send `COMMIT` to both, set `RETRANSMIT`, state → `COMMITTING`. |
 | `VOTE no` | `COLLECTING` | Log `DECISION_ABORT`, send `ABORT` to both, set `RETRANSMIT`, state → `ABORTING`. |
 | `VOTE_TIMEOUT` | `COLLECTING` | Same as `VOTE no` with reason `VOTE_TIMEOUT`. |

@@ -40,4 +40,11 @@ inline constexpr SimTimeUs k_s4_slow_link_us = 300'000;
 inline constexpr SimTimeUs k_s5_node_up_us = 3'000'000;
 [[nodiscard]] ScenarioSetup make_s5_participant_down(std::uint64_t seed);
 
+// S13: BANK_B (seller) holds k_s13_seller_bonds bonds, enough for one
+// standard trade but not two. Trade 1 (BANK_A buys) and trade 2 (BANK_C
+// buys) are submitted at t=0 in that order; both PREPAREs reach BANK_B at
+// the same time and the first scheduled one wins the lock.
+inline constexpr std::int64_t k_s13_seller_bonds = 40;
+[[nodiscard]] ScenarioSetup make_s13_lock_conflict(std::uint64_t seed);
+
 } // namespace glassbox

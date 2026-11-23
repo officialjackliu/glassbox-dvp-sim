@@ -244,3 +244,30 @@ Tests (`scenario_timeout_test`):
   locked or voted. Same for the crash/restart variant and seeds 2–3.
 
 Mutants: 5/5 compilable killed (+1 unused-parameter mutant checked directly).
+
+## Task 18: S13 lock conflict
+
+Built: `make_s13_lock_conflict(seed)`: BANK_B holds 40 bonds; trade 1 (A buys 25) and
+trade 2 (C buys 25) are submitted at t=0 in that order. Registered as S13.
+
+Decisions:
+- Winner rule is simply event order: both PREPAREs arrive at BANK_B at 36,100 and the
+  lower-seq one (first submitted) locks first. No special arbitration or global ledger.
+
+Tests (`scenario_lock_conflict_test`):
+- Right after 36,100: 25 bonds locked, 15 available; trade 1 PREPARING, trade 2 ABORTED.
+- B votes `YES` (trade 1) and `NO:INSUFFICIENT_BONDS` (trade 2) at 37,200; decisions
+  "1 COMMIT", "2 ABORT INSUFFICIENT_BONDS"; seller log PREPARED(1), ABORTED(2),
+  COMMITTED(1) in LSN order; loser's buyer C locks at 121,100 and unlocks at 193,300;
+  exact final balances; invariants.
+- Reversed submission order flips the winner (C commits, A untouched).
+- Capacity boundaries: 24 bonds → 0 commits, 25 → 1, 49 → 1, 50 → 2.
+- Seeds 1–5 identical.
+
+Test fix during development: in the reversed case I expected the coordinator to log the
+commit before the abort; it logs decisions in time order (abort at 72,200, commit at
+242,200 after C's yes crosses the 120 ms link). Corrected the expectation in the new test
+and added the exact decision durable times (73,200 / 243,200).
+
+Mutants: 3/3 killed (seller bonds 40→50, second submission delayed 1 µs, and the ledger's
+`available < amount` flipped to `<=`).

@@ -78,4 +78,16 @@ ScenarioSetup make_s5_participant_down(std::uint64_t seed)
     return setup;
 }
 
+ScenarioSetup make_s13_lock_conflict(std::uint64_t seed)
+{
+    ScenarioSetup setup = base_setup(seed);
+    setup.genesis.bank_b =
+        make_ledger(k_default_cash_cents, k_s13_seller_bonds);
+    setup.script.push_back(
+        submit(0, standard_trade(NodeId::bank_a, NodeId::bank_b)));
+    setup.script.push_back(
+        submit(0, standard_trade(NodeId::bank_c, NodeId::bank_b)));
+    return setup;
+}
+
 } // namespace glassbox

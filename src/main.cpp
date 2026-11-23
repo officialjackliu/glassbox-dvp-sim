@@ -333,20 +333,15 @@ struct Player {
             skip_travel = flow == Flow::skip && paused;
             ++frame;
         }
-        // End: hold the last event until a key (or k_card_ms).
-        render(rec.frames.size() - 1, rec.frames.back().time_us);
-        for (std::int64_t waited = 0; waited < k_card_ms * 100 / speed;
-             waited += 250) {
-            const cli::Key key = term.wait_key(250);
+        // End card until a key (or k_card_ms).
+        if (guide) {
+            const cli::Key key = show_card(
+                cli::draw_summary(rec, *guide, cli::ScreenOptions{width(), color}),
+                "[n] or Enter: continue   [r] replay   [q] quit");
             if (key == cli::Key::restart) {
                 return play();
             }
-            if (key == cli::Key::quit) {
-                return Next::quit;
-            }
-            if (key != cli::Key::none) {
-                break;
-            }
+            return key == cli::Key::quit ? Next::quit : Next::next;
         }
         return Next::next;
     }
@@ -463,6 +458,16 @@ int main(int argc, char** argv)
             }
             std::cout << title << "\n\n";
             print_story(rec);
+            if (const cli::ScenarioGuide* guide = cli::find_guide(info->id)) {
+                std::cout << '\n';
+                for (std::string line : cli::draw_summary(
+                         rec, *guide, cli::ScreenOptions{100, false})) {
+                    while (!line.empty() && line.back() == ' ') {
+                        line.pop_back();
+                    }
+                    std::cout << line << '\n';
+                }
+            }
         } else {
             cli::Terminal term;
             Player player{term,  rec,   cli::find_guide(info->id),

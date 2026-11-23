@@ -39,6 +39,13 @@ struct ScreenOptions {
                                                   const ScenarioGuide& guide,
                                                   const ScreenOptions& options);
 
+// The card shown after a scenario: each trade's outcome, every involved
+// bank's balances from start to end, timing, network and safety numbers
+// (from summarize()).
+[[nodiscard]] std::vector<std::string> draw_summary(const Recording& recording,
+                                                    const ScenarioGuide& guide,
+                                                    const ScreenOptions& options);
+
 // Columns a string takes on screen: UTF-8 code points, ANSI color escapes
 // excluded (every character the screen uses is one column wide).
 [[nodiscard]] std::size_t visible_width(std::string_view text) noexcept;

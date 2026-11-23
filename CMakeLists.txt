@@ -59,6 +59,7 @@ add_library(glassbox_cli STATIC
     src/cli/terminal.cpp
     src/cli/guide.cpp
     src/cli/dials.cpp
+    src/cli/summary.cpp
 )
 target_include_directories(glassbox_cli PUBLIC include)
 target_link_libraries(glassbox_cli PUBLIC glassbox_core)
@@ -315,3 +316,7 @@ add_test(NAME cli_guide_test COMMAND cli_guide_test)
 add_executable(cli_dials_test tests/cli_dials_test.cpp)
 target_link_libraries(cli_dials_test PRIVATE glassbox_cli)
 add_test(NAME cli_dials_test COMMAND cli_dials_test)
+
+add_executable(cli_summary_test tests/cli_summary_test.cpp)
+target_link_libraries(cli_summary_test PRIVATE glassbox_cli)
+add_test(NAME cli_summary_test COMMAND cli_summary_test)

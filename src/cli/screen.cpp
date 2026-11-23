@@ -1,8 +1,10 @@
 #include "cli/screen.hpp"
 
 #include "cli/narrator.hpp"
+#include "cli/summary.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <map>
 #include <optional>
 #include <set>
@@ -690,6 +692,120 @@ std::vector<std::string> draw_intro(const Recording& rec,
              width - 2, "    ", "    ")) {
         out.push_back(fit(line, width));
     }
+    return out;
+}
+
+std::vector<std::string> draw_summary(const Recording& rec,
+                                      const ScenarioGuide& guide,
+                                      const ScreenOptions& options)
+{
+    const std::size_t width =
+        static_cast<std::size_t>(std::clamp(options.width, 80, 200));
+    const Paint paint{options.color};
+    const RunSummary sum = summarize(rec);
+    std::vector<std::string> out;
+    const auto section = [&](std::string_view heading) {
+        out.push_back(std::string(width, ' '));
+        out.push_back(paint(fit("  " + std::string{heading}, width), k_bold));
+    };
+    const auto line = [&](const std::string& text, std::string_view color = {},
+                          std::string_view indent = "    ") {
+        const std::string rest = std::string{indent} + "  ";
+        for (const std::string& l : wrap(text, width - 2, indent, rest)) {
+            out.push_back(color.empty() ? fit(l, width) : paint(fit(l, width), color));
+        }
+    };
+    out.push_back(paint(fit("  " + std::string{guide.id} + " · " +
+                                std::string{guide.title} +
+                                (rec.quiesced ? " · finished"
+                                              : " · stopped before the end"),
+                            width),
+                        k_bold));
+
+    section(sum.trades.size() > 1 ? "Outcomes" : "Outcome");
+    for (const TradeOutcome& t : sum.trades) {
+        const std::string bonds = bonds_text(t.qty);
+        const std::string cash = dollars(t.cash);
+        const std::string id = "#" + std::to_string(t.trade_id.value()) + "  ";
+        if (t.decision == Decision::commit) {
+            line(id + "SETTLED: " + name(t.buyer) + " paid " + cash +
+                     " and received " + bonds + "; " + name(t.seller) +
+                     " delivered them and received " + cash,
+                 k_green);
+        } else {
+            std::string why{glassbox::to_string(t.reason)};
+            for (char& c : why) {
+                c = c == '_' ? ' ' : static_cast<char>(std::tolower(c));
+            }
+            line(id + "CANCELLED (" + why + "): nothing moved at " +
+                     name(t.buyer) + " or " + name(t.seller),
+                 k_red);
+        }
+        line("finished " + format_duration(t.settled_after_us) +
+                 " after it was submitted",
+             {}, "        ");
+    }
+    if (sum.trades.empty()) {
+        line("no trade was decided");
+    }
+
+    section("Balances, start → end");
+    const auto change = [](const std::string& a, const std::string& b) {
+        return a == b ? a + " (unchanged)" : a + " → " + b;
+    };
+    for (const NodeId node : involved_nodes(rec)) {
+        const NodeView& start = rec.frames.front().nodes[view_index(node)];
+        const NodeView& end = rec.frames.back().nodes[view_index(node)];
+        if (!start.balances || !end.balances) {
+            continue;
+        }
+        line(fit(name(node), 8) + "cash " +
+             change(dollars(Cents{start.balances->cash_total}),
+                    dollars(Cents{end.balances->cash_total})) +
+             "   bonds " +
+             change(with_commas(start.balances->bonds_total),
+                    with_commas(end.balances->bonds_total)));
+    }
+
+    section("Timing (simulated)");
+    std::string locks = "assets locked: ";
+    bool first = true;
+    for (const NodeId node : involved_nodes(rec)) {
+        if (node == NodeId::coordinator) {
+            continue;
+        }
+        locks += (first ? "" : " · ") + name(node) + " " +
+                 format_duration(sum.lock_hold_us[view_index(node) - 1]);
+        first = false;
+    }
+    line(locks);
+    line("longest wait in doubt (voted YES, outcome unknown): " +
+         format_duration(sum.longest_in_doubt_us));
+
+    section("Network");
+    line(std::to_string(sum.sent) + " messages sent · " +
+         std::to_string(sum.dropped) + " lost · " +
+         std::to_string(sum.retransmits) + " resent by the coordinator");
+
+    section("Safety");
+    // Atomicity: no trade COMMITTED at one bank and not at the other.
+    bool agree = true;
+    for (const TradeOutcome& t : sum.trades) {
+        const auto state = [&](NodeId bank) {
+            const auto& trades = rec.frames.back().nodes[view_index(bank)].trades;
+            const auto it = trades.find(t.trade_id);
+            return it == trades.end() ? TradeState::none : it->second.state;
+        };
+        agree = agree && ((state(t.buyer) == TradeState::committed) ==
+                          (state(t.seller) == TradeState::committed));
+    }
+    line(std::to_string(sum.checks_run) + " events, invariants checked after "
+         "each: " + std::to_string(sum.violations) +
+             (sum.violations == 0 ? " problems ✓" : " problems ✗"),
+         sum.violations == 0 ? k_green : k_red);
+    line(agree ? "both banks agree on every trade: atomic ✓"
+               : "the banks disagree on a trade ✗",
+         agree ? k_green : k_red);
     return out;
 }
 

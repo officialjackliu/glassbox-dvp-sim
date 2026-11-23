@@ -24,5 +24,16 @@ int main()
                   std::string::npos);
         }
     }
+    std::ifstream simulator_source{"src/simulator.cpp"};
+    CHECK(simulator_source.is_open());
+    std::string line;
+    int timer_scheduling_sites = 0;
+    while (std::getline(simulator_source, line)) {
+        if (line.find("            EventKind::fire_timer,") !=
+            std::string::npos) {
+            ++timer_scheduling_sites;
+        }
+    }
+    CHECK(timer_scheduling_sites == 1);
     return 0;
 }

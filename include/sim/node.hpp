@@ -12,7 +12,8 @@ struct TimerEvent {
     std::uint64_t epoch;
     TimerKind kind;
     std::optional<TradeId> trade_id;
-    std::string expected_state;
+    TradeState expected_state;
+    std::uint32_t attempt;
 };
 
 class Node {
@@ -23,6 +24,8 @@ class Node {
                                              SimTimeUs now) = 0;
     [[nodiscard]] virtual Effects on_timer(const TimerEvent& event,
                                            SimTimeUs now) = 0;
+    [[nodiscard]] virtual TradeState trade_state(
+        TradeId trade_id) const = 0;
     virtual void on_crash() = 0;
     [[nodiscard]] virtual Effects on_restart(
         const std::vector<LogRecord>& durable_log,

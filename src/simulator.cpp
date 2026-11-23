@@ -20,6 +20,12 @@ Simulator::Simulator(const SimulatorConfig& config, TraceSink& trace_sink)
         throw std::invalid_argument(
             "processing and log flush delays must be non-negative");
     }
+    if (config.timers.vote_timeout_us <= 0 ||
+        !validate(config.timers.retransmit) ||
+        !validate(config.timers.decision_wait)) {
+        throw std::invalid_argument(
+            "timer configuration must have positive vote timeout and valid backoffs");
+    }
     node_up_.fill(true);
     epochs_.fill(0);
 }
@@ -199,8 +205,30 @@ std::optional<MeasuredNs> Simulator::apply_effects(
     }
 
     for (TimerRequest& timer : effects.timers) {
+        if (timer.delay_us < 1) {
+            emit_trace(
+                SequenceId{0},
+                now,
+                "TIMER_REJECTED",
+                "Effects::timer",
+                0,
+                "invalid_delay");
+            continue;
+        }
+        const auto fire_time =
+            checked_add_i64(*send_time, timer.delay_us);
+        if (!fire_time) {
+            emit_trace(
+                SequenceId{0},
+                now,
+                "TIMER_REJECTED",
+                "Effects::timer",
+                0,
+                "overflow");
+            continue;
+        }
         const auto scheduled_timer = schedule_at(
-            timer.fire_time_us,
+            *fire_time,
             EventKind::fire_timer,
             FireTimerEvent{
                 source,
@@ -208,14 +236,25 @@ std::optional<MeasuredNs> Simulator::apply_effects(
                 timer.kind,
                 timer.trade_id,
                 timer.expected_state,
+                timer.attempt,
             });
-        if (scheduled_timer.status != ScheduleStatus::scheduled) {
+        if (scheduled_timer.status == ScheduleStatus::scheduled) {
+            emit_trace(
+                scheduled_timer.seq.value_or(SequenceId{0}),
+                now,
+                "TIMER_SET",
+                "Effects::timer",
+                0);
+        } else {
             emit_trace(
                 SequenceId{0},
                 now,
                 "TIMER_REJECTED",
                 "Effects::timer",
-                0);
+                0,
+                scheduled_timer.status == ScheduleStatus::past_time
+                    ? "past_time"
+                    : "queue_exhausted");
         }
     }
 
@@ -458,18 +497,40 @@ void Simulator::dispatch_timer(const FireTimerEvent& payload,
                                SequenceId seq)
 {
     const std::size_t index = node_index(payload.node);
-    if (!node_up_[index] ||
-        epochs_[index] != payload.epoch) {
+    if (!node_up_[index]) {
         emit_trace(
             seq,
             clock_.now_us(),
             "TIMER_IGNORED",
             "Simulator::dispatch_timer",
-            0);
+            0,
+            "node_down");
+        return;
+    }
+    if (epochs_[index] != payload.epoch) {
+        emit_trace(
+            seq,
+            clock_.now_us(),
+            "TIMER_IGNORED",
+            "Simulator::dispatch_timer",
+            0,
+            "stale_epoch");
         return;
     }
     Node* implementation = nodes_[index].get();
     if (!implementation) {
+        return;
+    }
+    if (payload.trade_id &&
+        implementation->trade_state(*payload.trade_id) !=
+            payload.expected_state) {
+        emit_trace(
+            seq,
+            clock_.now_us(),
+            "TIMER_IGNORED",
+            "Simulator::dispatch_timer",
+            0,
+            "state_mismatch");
         return;
     }
     TimerEvent timer{
@@ -478,6 +539,7 @@ void Simulator::dispatch_timer(const FireTimerEvent& payload,
         payload.kind,
         payload.trade_id,
         payload.expected_state,
+        payload.attempt,
     };
     const auto start = std::chrono::steady_clock::now();
     Effects effects =
@@ -561,7 +623,8 @@ void Simulator::emit_trace(SequenceId seq,
                           SimTimeUs now,
                           const std::string& kind,
                           const std::string& handler,
-                          MeasuredNs measured_ns)
+                          MeasuredNs measured_ns,
+                          std::optional<std::string> reason)
 {
     static_cast<void>(seq);
     ++trace_seq_;
@@ -572,6 +635,7 @@ void Simulator::emit_trace(SequenceId seq,
             kind,
             handler,
             measured_ns,
+            reason,
         });
 }
 

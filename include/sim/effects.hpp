@@ -23,10 +23,11 @@ struct Outgoing {
 };
 
 struct TimerRequest {
-    SimTimeUs fire_time_us;
+    SimTimeUs delay_us;
     TimerKind kind;
     std::optional<TradeId> trade_id;
-    std::string expected_state;
+    TradeState expected_state;
+    std::uint32_t attempt = 0;
 };
 
 struct TraceNote {

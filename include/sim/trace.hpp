@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <optional>
 
 namespace glassbox {
 
@@ -13,6 +14,7 @@ struct TraceRecord {
     std::string kind;
     std::string handler;
     std::uint64_t measured_ns = 0;
+    std::optional<std::string> reason;
 };
 
 class TraceSink {

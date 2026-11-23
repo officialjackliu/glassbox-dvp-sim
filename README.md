@@ -33,6 +33,8 @@ through its tests and code review.
 - `include/sim/simulator.hpp` and `src/simulator.cpp` provide the single-threaded
   event loop, epoch invalidation, deferred log/send timers, node registry,
   scripted actions, and minimal trace sink.
+- `include/sim/timers.hpp` provides stateless, overflow-safe timer backoff helpers.
+  Timer requests carry a relative delay, attempt, trade ID, and expected trade state.
 - `src/main.cpp` is the integration smoke executable. It constructs core values,
   schedules two events, steps them through virtual time, and emits a synthetic
   trace line.

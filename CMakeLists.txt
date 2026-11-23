@@ -95,3 +95,10 @@ add_test(NAME node_purity_test COMMAND node_purity_test)
 set_tests_properties(node_purity_test PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+add_executable(timers_test
+    tests/timers_test.cpp
+)
+
+target_include_directories(timers_test PRIVATE include)
+add_test(NAME timers_test COMMAND timers_test)

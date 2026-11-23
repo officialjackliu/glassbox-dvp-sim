@@ -103,7 +103,8 @@ struct FireTimerEvent {
     std::uint64_t epoch;
     TimerKind kind;
     std::optional<TradeId> trade_id;
-    std::string expected_state;
+    TradeState expected_state;
+    std::uint32_t attempt;
 };
 
 struct NodeCrashEvent {

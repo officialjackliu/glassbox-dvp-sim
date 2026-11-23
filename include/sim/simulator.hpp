@@ -12,6 +12,7 @@
 #include "sim/network_model.hpp"
 #include "sim/node.hpp"
 #include "sim/trace.hpp"
+#include "sim/timers.hpp"
 #include "sim/virtual_clock.hpp"
 
 #include <array>
@@ -21,10 +22,23 @@
 
 namespace glassbox {
 
+struct TimerConfig {
+    SimTimeUs vote_timeout_us = 500'000;
+    BackoffPolicy retransmit{
+        1'000'000,
+        8'000'000,
+    };
+    BackoffPolicy decision_wait{
+        1'000'000,
+        8'000'000,
+    };
+};
+
 struct SimulatorConfig {
     std::uint64_t seed = DeterministicRng::default_seed;
     SimTimeUs processing_delay_us = 100;
     SimTimeUs log_flush_delay_us = 1'000;
+    TimerConfig timers;
 };
 
 enum class ScheduleStatus : std::uint8_t {
@@ -114,7 +128,8 @@ class Simulator {
                     SimTimeUs now,
                     const std::string& kind,
                     const std::string& handler,
-                    MeasuredNs measured_ns);
+                    MeasuredNs measured_ns,
+                    std::optional<std::string> reason = std::nullopt);
 
     [[nodiscard]] static std::size_t node_index(NodeId node) noexcept;
 

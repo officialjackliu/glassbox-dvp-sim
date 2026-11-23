@@ -30,6 +30,18 @@ enum class ReasonCode : std::uint8_t {
     unknown_trade,
 };
 
+enum class TradeState : std::uint8_t {
+    none,
+    collecting,
+    committing,
+    aborting,
+    done,
+    preparing,
+    prepared,
+    committed,
+    aborted,
+};
+
 enum class NodeId : std::uint8_t {
     coordinator,
     bank_a,

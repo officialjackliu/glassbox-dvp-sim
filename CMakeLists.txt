@@ -35,6 +35,7 @@ add_executable(glassbox-dvp-sim
     src/main.cpp
     src/simulator.cpp
     src/domain/local_ledger.cpp
+    src/domain/trade.cpp
 )
 
 target_include_directories(glassbox-dvp-sim PRIVATE include)
@@ -112,5 +113,16 @@ add_executable(local_ledger_test
 target_include_directories(local_ledger_test PRIVATE include)
 add_test(NAME local_ledger_test COMMAND local_ledger_test)
 set_tests_properties(local_ledger_test PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
+add_executable(trade_test
+    src/domain/trade.cpp
+    tests/trade_test.cpp
+)
+
+target_include_directories(trade_test PRIVATE include)
+add_test(NAME trade_test COMMAND trade_test)
+set_tests_properties(trade_test PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

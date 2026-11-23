@@ -9,6 +9,7 @@ int main()
         "include/sim/node.hpp",
         "include/sim/effects.hpp",
         "include/domain/local_ledger.hpp",
+        "include/domain/trade.hpp",
     };
     for (const char* file : files) {
         std::ifstream input{file};

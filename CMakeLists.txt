@@ -34,6 +34,7 @@ endif()
 add_executable(glassbox-dvp-sim
     src/main.cpp
     src/simulator.cpp
+    src/domain/local_ledger.cpp
 )
 
 target_include_directories(glassbox-dvp-sim PRIVATE include)
@@ -102,3 +103,14 @@ add_executable(timers_test
 
 target_include_directories(timers_test PRIVATE include)
 add_test(NAME timers_test COMMAND timers_test)
+
+add_executable(local_ledger_test
+    src/domain/local_ledger.cpp
+    tests/local_ledger_test.cpp
+)
+
+target_include_directories(local_ledger_test PRIVATE include)
+add_test(NAME local_ledger_test COMMAND local_ledger_test)
+set_tests_properties(local_ledger_test PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)

@@ -83,6 +83,46 @@ int main()
     CHECK(glassbox::to_string(glassbox::Asset::ust_10y) ==
           "UST_10Y");
 
+    // Exact, distinct trace labels for every trade rejection reason.
+    {
+        const std::array<std::pair<
+                          glassbox::TradeRejectReason,
+                          std::string_view>,
+                          7> labels{
+            std::pair{
+                glassbox::TradeRejectReason::unknown_node,
+                "UNKNOWN_NODE"},
+            std::pair{
+                glassbox::TradeRejectReason::same_party,
+                "SAME_PARTY"},
+            std::pair{
+                glassbox::TradeRejectReason::invalid_asset,
+                "INVALID_ASSET"},
+            std::pair{
+                glassbox::TradeRejectReason::invalid_quantity,
+                "INVALID_QUANTITY"},
+            std::pair{
+                glassbox::TradeRejectReason::invalid_price,
+                "INVALID_PRICE"},
+            std::pair{
+                glassbox::TradeRejectReason::expired,
+                "EXPIRED"},
+            std::pair{
+                glassbox::TradeRejectReason::id_exhausted,
+                "ID_EXHAUSTED"},
+        };
+
+        for (std::size_t i = 0; i < labels.size(); ++i) {
+            CHECK(glassbox::to_string(labels[i].first) ==
+                  labels[i].second);
+            for (std::size_t j = i + 1;
+                 j < labels.size();
+                 ++j) {
+                CHECK(labels[i].second != labels[j].second);
+            }
+        }
+    }
+
     // Valid request produces an exact Trade.
     {
         glassbox::TradeIdAllocator allocator;
@@ -116,6 +156,11 @@ int main()
               glassbox::TradeRejectReason::unknown_node);
         request = valid_request();
         request.buyer =
+            static_cast<glassbox::NodeId>(42);
+        CHECK(glassbox::validate(request, 0) ==
+              glassbox::TradeRejectReason::unknown_node);
+        request = valid_request();
+        request.seller =
             static_cast<glassbox::NodeId>(42);
         CHECK(glassbox::validate(request, 0) ==
               glassbox::TradeRejectReason::unknown_node);
@@ -322,6 +367,27 @@ int main()
             std::get_if<glassbox::Trade>(&accepted_result);
         CHECK(accepted != nullptr);
         CHECK(accepted->trade_id().value() == 1);
+    }
+
+    // Exhaustion through validate_and_assign never yields a Trade.
+    {
+        glassbox::TradeIdAllocator allocator;
+        allocator.observe(
+            glassbox::TradeId{
+                std::numeric_limits<glassbox::TradeIdValue>::max()});
+
+        for (int i = 0; i < 2; ++i) {
+            const auto result =
+                glassbox::validate_and_assign(
+                    valid_request(),
+                    0,
+                    allocator);
+            CHECK(std::holds_alternative<
+                      glassbox::TradeRejectReason>(result));
+            CHECK(std::get<glassbox::TradeRejectReason>(result) ==
+                  glassbox::TradeRejectReason::id_exhausted);
+            CHECK(!std::holds_alternative<glassbox::Trade>(result));
+        }
     }
 
     // Stub coordinator mixed batch and replay determinism.

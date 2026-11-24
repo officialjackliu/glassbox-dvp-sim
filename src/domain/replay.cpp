@@ -1,3 +1,7 @@
+// Crash-recovery replay: rebuilds a participant's ledger and trade states, or
+// the coordinator's decisions, from a durable log in LSN order, reporting
+// inconsistent logs as ReplayErrors.
+
 #include "domain/replay.hpp"
 
 #include <algorithm>

@@ -12,12 +12,17 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace glassbox {
 
+// Number of nodes (COORD, BANK_A, BANK_B, BANK_C); sizes per-node tables.
 inline constexpr std::size_t k_node_count = 4;
 
+// One direction of a link: base one-way delay, random extra delay of up to
+// `jitter_us`, and chance of losing a message in parts per million.
 struct LinkConfig {
     // Illustrative defaults, not measured network performance.
     SimTimeUs base_latency_us = 1;
@@ -25,12 +30,15 @@ struct LinkConfig {
     std::uint32_t drop_probability_ppm = 0;
 };
 
+// A pending one-shot fault on a directed link: affects the next message (of
+// `message_type`, if set).
 struct NextDrop {
     NodeId from;
     NodeId to;
     std::optional<MessageType> message_type;
 };
 
+// Outcome of handing a message to the network.
 enum class NetworkScheduleStatus : std::uint8_t {
     scheduled,
     dropped,
@@ -39,6 +47,8 @@ enum class NetworkScheduleStatus : std::uint8_t {
     event_queue_failure,
 };
 
+// What schedule_delivery() did with a message: delivered or dropped (and
+// why), its event, and when it was sent and arrives (or would have).
 struct NetworkScheduleResult {
     NetworkScheduleStatus status = NetworkScheduleStatus::event_queue_failure;
     bool delivered = false;
@@ -48,8 +58,19 @@ struct NetworkScheduleResult {
     SimTimeUs deliver_time_us = 0;
 };
 
+// The simulated network: a latency/jitter/drop setting for every directed
+// link, partitions, offline nodes, and one-shot drop/duplicate faults. It turns
+// a send into a delivery or drop event on the queue. Every message consumes
+// exactly one jitter draw and one drop draw from the shared RNG, so runs with
+// the same seed are identical.
+//
+// Default one-way latencies (illustrative): 1 ms within New York (COORD,
+// BANK_A), 35 ms New York - London (BANK_B), 120 ms New York - Singapore
+// (BANK_C), 85 ms London - Singapore.
 class NetworkModel {
   public:
+    // Uses `rng` (which must outlive the model) for all random draws and starts
+    // with the default links.
     explicit NetworkModel(DeterministicRng& rng)
         : rng_(rng)
     {
@@ -99,27 +120,33 @@ class NetworkModel {
         link_[node_index(from)][node_index(to)] = normalized;
     }
 
+    // Returns the current setting of the `from` -> `to` link.
     [[nodiscard]] const LinkConfig& link(NodeId from, NodeId to) const noexcept
     {
         return link_[node_index(from)][node_index(to)];
     }
 
+    // Cuts (`partitioned` true) or restores the link between `a` and `b`, both
+    // directions. Checked when a message is sent.
     void set_partition(NodeId a, NodeId b, bool partitioned) noexcept
     {
         partition_[node_index(a)][node_index(b)] = partitioned;
         partition_[node_index(b)][node_index(a)] = partitioned;
     }
 
+    // Returns true if the `a` -> `b` direction is cut.
     [[nodiscard]] bool partitioned(NodeId a, NodeId b) const noexcept
     {
         return partition_[node_index(a)][node_index(b)];
     }
 
+    // Marks `node` as unreachable (or reachable again).
     void set_node_down(NodeId node, bool down) noexcept
     {
         node_down_[node_index(node)] = down;
     }
 
+    // Returns true if `node` is marked unreachable.
     [[nodiscard]] bool node_down(NodeId node) const noexcept
     {
         return node_down_[node_index(node)];
@@ -142,11 +169,19 @@ class NetworkModel {
         next_drops_.push_back(NextDrop{from, to, std::nullopt});
     }
 
+    // The next matching message on this directed link is delivered twice.
+    // The copy keeps the msg_id and consumes its own jitter + drop draws
+    // (it is a second message on the wire), right after the original's.
+    void duplicate_next(NodeId from, NodeId to, MessageType message_type)
+    {
+        next_duplicates_.push_back(NextDrop{from, to, message_type});
+    }
+
     // Called by send-side simulator code. It always consumes the configured
     // jitter and PPM drop draws before applying non-random fault precedence.
-    // node_down(to) is a send-time check in this component. Task 6's event loop
-    // must re-check the destination when a deliver_message event is popped;
-    // that arrival-time check handles nodes crashing or restarting mid-flight.
+    // node_down(to) is a send-time check here; the simulator checks the
+    // destination again on arrival (MSG_DROP_NODE_DOWN), which covers nodes
+    // crashing or restarting while a message is in flight.
     [[nodiscard]] NetworkScheduleResult schedule_delivery(
         EventQueue& queue,
         SimTimeUs send_time_us,
@@ -156,12 +191,61 @@ class NetworkModel {
         std::uint64_t msg_id = 0,
         std::optional<TradeId> trade_id = std::nullopt)
     {
+        return schedule_delivery(
+            queue,
+            send_time_us,
+            Message{
+                msg_id,
+                from,
+                to,
+                message_type,
+                trade_id,
+                std::monostate{},
+            });
+    }
+
+    // Full-message overload: the body travels with the message unchanged.
+    // Draw order is identical to the field overload (one jitter + one drop).
+    [[nodiscard]] NetworkScheduleResult schedule_delivery(
+        EventQueue& queue,
+        SimTimeUs send_time_us,
+        Message message)
+    {
+        bool duplicate = false;
+        for (std::size_t i = 0; i < next_duplicates_.size(); ++i) {
+            const NextDrop& next = next_duplicates_[i];
+            if (next.from == message.from && next.to == message.to &&
+                next.message_type == message.type) {
+                next_duplicates_.erase(next_duplicates_.begin() +
+                                       static_cast<std::ptrdiff_t>(i));
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            return schedule_one(queue, send_time_us, std::move(message));
+        }
+        Message copy = message;
+        NetworkScheduleResult original =
+            schedule_one(queue, send_time_us, std::move(message));
+        static_cast<void>(schedule_one(queue, send_time_us, std::move(copy)));
+        return original;
+    }
+
+  private:
+    [[nodiscard]] NetworkScheduleResult schedule_one(
+        EventQueue& queue,
+        SimTimeUs send_time_us,
+        Message message)
+    {
         if (send_time_us < 0) {
             return {NetworkScheduleStatus::invalid_send_time,
                     false, std::nullopt, std::nullopt,
                     send_time_us, 0};
         }
 
+        const NodeId from = message.from;
+        const NodeId to = message.to;
         const LinkConfig& config = link(from, to);
         const DeterministicNetworkDraw random_draw =
             draw_network_delivery(
@@ -188,7 +272,7 @@ class NetworkModel {
                 const NextDrop& next = next_drops_[i];
                 if (next.from == from && next.to == to &&
                     (!next.message_type ||
-                     *next.message_type == message_type)) {
+                     *next.message_type == message.type)) {
                     next_drops_.erase(next_drops_.begin() +
                                       static_cast<std::ptrdiff_t>(i));
                     reason = DropReason::next_message;
@@ -206,13 +290,7 @@ class NetworkModel {
                 *deliver_at,
                 EventKind::drop_message,
                 DropMessageEvent{
-                    Message{
-                        msg_id,
-                        from,
-                        to,
-                        message_type,
-                        trade_id,
-                    },
+                    message,
                     *reason,
                     send_time_us,
                     *deliver_at,
@@ -226,13 +304,7 @@ class NetworkModel {
             *deliver_at,
             EventKind::deliver_message,
             DeliverMessageEvent{
-                Message{
-                    msg_id,
-                    from,
-                    to,
-                    message_type,
-                    trade_id,
-                },
+                std::move(message),
                 to,
                 send_time_us,
                 *deliver_at,
@@ -248,7 +320,6 @@ class NetworkModel {
                 send_time_us, *deliver_at};
     }
 
-  private:
     [[nodiscard]] static std::size_t node_index(NodeId node) noexcept
     {
         return static_cast<std::size_t>(node);
@@ -259,6 +330,7 @@ class NetworkModel {
     std::array<std::array<bool, k_node_count>, k_node_count> partition_{};
     std::array<bool, k_node_count> node_down_{};
     std::vector<NextDrop> next_drops_;
+    std::vector<NextDrop> next_duplicates_;
 };
 
 } // namespace glassbox

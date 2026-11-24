@@ -13,9 +13,14 @@ int main()
         "include/domain/log_records.hpp",
         "include/domain/durable_log.hpp",
         "include/domain/replay.hpp",
-        "include/domain/log_records.hpp",
-        "include/domain/durable_log.hpp",
-        "include/domain/replay.hpp",
+        "include/protocol/messages.hpp",
+        "include/protocol/coordinator.hpp",
+        "include/protocol/participant.hpp",
+        // Protocol sources: nodes never reach the simulator, network, RNG,
+        // or clock, so they cannot touch another node's state.
+        "src/protocol/messages.cpp",
+        "src/protocol/coordinator.cpp",
+        "src/protocol/participant.cpp",
     };
     for (const char* file : files) {
         std::ifstream input{file};

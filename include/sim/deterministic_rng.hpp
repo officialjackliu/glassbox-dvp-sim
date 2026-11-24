@@ -14,17 +14,22 @@
 
 namespace glassbox {
 
+// The run's only source of randomness: a seeded mt19937_64 with integer-only
+// draws. Same seed, same sequence, so a scenario replays identically. One per
+// simulator; never global.
 class DeterministicRng {
   public:
     using result_type = std::uint64_t;
     static constexpr result_type default_seed = 1;
 
+    // Seeds the engine with `seed`.
     explicit DeterministicRng(result_type seed) noexcept
         : engine_(seed),
           seed_(seed)
     {
     }
 
+    // Returns the seed the engine started from.
     [[nodiscard]] constexpr result_type seed() const noexcept
     {
         return seed_;
@@ -37,6 +42,7 @@ class DeterministicRng {
         return engine_();
     }
 
+    // Returns a uniform integer in [0, upper_bound).
     [[nodiscard]] std::uint64_t uniform_u64(std::uint64_t upper_bound) noexcept
     {
         // Produces an integer in [0, upper_bound) using rejection sampling.
@@ -54,6 +60,7 @@ class DeterministicRng {
         return value % upper_bound;
     }
 
+    // Returns a uniform integer in [lower, upper].
     [[nodiscard]] std::int64_t uniform_i64(std::int64_t lower,
                                            std::int64_t upper) noexcept
     {
@@ -109,6 +116,7 @@ class DeterministicRng {
             offset - negative_count);
     }
 
+    // Restarts the sequence from the seed.
     void reset() noexcept
     {
         // Restores the scenario seed. Tests and replay code call reset when they
@@ -141,6 +149,8 @@ inline constexpr std::uint32_t drop_probability_denominator = 1'000'000;
     return draw < probability_ppm;
 }
 
+// Returns `base_latency_us` plus a random jitter in [-jitter_us, +jitter_us],
+// at least 1 us. Always takes exactly one draw.
 [[nodiscard]] inline SimTimeUs draw_jittered_latency(
     DeterministicRng& rng,
     SimTimeUs base_latency_us,
@@ -173,11 +183,13 @@ inline constexpr std::uint32_t drop_probability_denominator = 1'000'000;
     return latency < 1 ? 1 : latency;
 }
 
+// The two random outcomes for one message: its latency and whether it is lost.
 struct DeterministicNetworkDraw {
     SimTimeUs latency_us;
     bool dropped;
 };
 
+// Draws latency and loss for one message on a link (jitter first, then drop).
 [[nodiscard]] inline DeterministicNetworkDraw draw_network_delivery(
     DeterministicRng& rng,
     SimTimeUs base_latency_us,

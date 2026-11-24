@@ -14,10 +14,13 @@
 
 namespace glassbox {
 
+// A message the node wants sent.
 struct Outgoing {
     Message message;
 };
 
+// A timer the node wants set: fires `delay_us` after the batch's messages are
+// released, and only if the trade is still in `expected_state` then.
 struct TimerRequest {
     SimTimeUs delay_us;
     TimerKind kind;
@@ -26,11 +29,19 @@ struct TimerRequest {
     std::uint32_t attempt = 0;
 };
 
+// Extra trace detail a node attaches to a batch (STATE_CHANGE, LOCK, UNLOCK,
+// APPLY, REJECTED, INVARIANT_VIOLATION, ...). The simulator emits it; the node
+// never writes to the trace itself.
 struct TraceNote {
     std::string kind;
     std::string detail;
+    std::optional<TradeId> trade_id = std::nullopt;
+    std::string handler = "NodeEffect";
 };
 
+// Everything one handler call asks for, applied by the simulator as one batch:
+// logs become durable first, then the sends leave, then timers start (the
+// write-ahead rule). `notes` only add trace detail.
 struct Effects {
     std::vector<Outgoing> sends;
     std::vector<LogRecord> logs;

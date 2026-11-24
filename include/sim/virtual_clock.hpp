@@ -19,6 +19,8 @@
 
 namespace glassbox {
 
+// Simulated time. It moves only when an event is popped, jumping straight to
+// that event's time; there is no waiting.
 class VirtualClock {
   public:
     // Read by event-loop and trace code to stamp simulation-time fields.
@@ -27,6 +29,9 @@ class VirtualClock {
         return now_us_;
     }
 
+    // Pops the earliest event from `queue`, advances to its time and returns it,
+    // or std::nullopt if the queue is empty. Throws std::invalid_argument if the
+    // event is earlier than the current time.
     [[nodiscard]] std::optional<Event> pop_next(EventQueue& queue)
     {
         const auto earliest = queue.peek();
@@ -49,8 +54,11 @@ class VirtualClock {
     SimTimeUs now_us_ = 0;
 };
 
+// Real (wall-clock) nanoseconds a handler took. For display only.
 using MeasuredNs = std::uint64_t;
 
+// Runs `handler` and returns how long it took in real nanoseconds. The result
+// must never influence the simulation.
 template <typename Handler>
 [[nodiscard]] MeasuredNs measure_handler(Handler&& handler)
 {
@@ -61,6 +69,7 @@ template <typename Handler>
         std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count());
 }
 
+// A minimal trace event for the smoke test's JSON line.
 struct SyntheticTraceEvent {
     SimTimeUs sim_time_us = 0;
     std::uint64_t measured_ns = 0;

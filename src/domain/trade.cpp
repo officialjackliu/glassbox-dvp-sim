@@ -1,3 +1,5 @@
+// Trade validation in a fixed check order and trade id allocation.
+
 #include "domain/trade.hpp"
 
 #include <limits>

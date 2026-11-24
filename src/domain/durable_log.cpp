@@ -1,3 +1,5 @@
+// DurableLog: append-only records numbered by LSN.
+
 #include "domain/durable_log.hpp"
 
 #include <limits>

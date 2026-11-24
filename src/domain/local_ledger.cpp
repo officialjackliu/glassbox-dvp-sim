@@ -1,3 +1,8 @@
+// LocalLedger: checked balance changes. Every operation computes all new
+// values first and assigns them only if every check passes, so a refused
+// change leaves the ledger untouched. apply() maps a LedgerOp to the matching
+// operation; it is used both live and during replay.
+
 #include "domain/local_ledger.hpp"
 
 #include <type_traits>

@@ -1,3 +1,7 @@
+// Scenario helpers (default ledgers, the standard trade), the S1-S14
+// registry, and ScenarioRun, which builds and runs a simulation from a
+// ScenarioSetup while collecting its trace.
+
 #include "scenarios/scenario.hpp"
 
 #include "scenarios/scenario_library.hpp"

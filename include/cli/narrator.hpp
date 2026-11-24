@@ -26,6 +26,7 @@ enum class Stage : std::uint8_t {
     confirm, // banks acknowledge, coordinator writes END
 };
 
+// Returns the stage's label for the stage bar, e.g. "vote".
 [[nodiscard]] std::string_view to_string(Stage stage) noexcept;
 
 enum class Tone : std::uint8_t {
@@ -35,6 +36,8 @@ enum class Tone : std::uint8_t {
     failure, // crash, lost message, refusal, abort decision
 };
 
+// One event explained. `stage` is set when the event moves a trade along;
+// `tone` picks the colour.
 struct Story {
     std::string headline;
     std::vector<std::string> details; // checks, amounts, what comes next
@@ -44,6 +47,8 @@ struct Story {
     Tone tone = Tone::info;
 };
 
+// Explains frame `frame` of `recording` (frame 0 and out-of-range frames get
+// a fixed headline). With several trades in the run, headlines name the trade.
 [[nodiscard]] Story narrate(const Recording& recording, std::size_t frame);
 
 // Frames that only clean up (every record a TIMER_IGNORED). The player

@@ -25,12 +25,14 @@
 
 namespace glassbox {
 
+// Where in a handler's batch the crash happens (see the file comment).
 enum class CrashPoint : std::uint8_t {
     before_log,
     after_log_before_send,
     after_first_send,
 };
 
+// Returns the trace spelling of `point`, e.g. "AFTER_FIRST_SEND".
 [[nodiscard]] constexpr std::string_view to_string(CrashPoint point) noexcept
 {
     switch (point) {
@@ -44,8 +46,12 @@ enum class CrashPoint : std::uint8_t {
     return "UNKNOWN";
 }
 
+// The event that arms the crash: a message type delivered, or a timer kind
+// firing.
 using CrashTrigger = std::variant<MessageType, TimerKind>;
 
+// One scheduled crash: which node, on which event (and trade), at which
+// point, on which occurrence, and when it restarts.
 struct CrashSpec {
     NodeId node;
     std::optional<TradeId> trade_id;

@@ -1,3 +1,6 @@
+// Global invariant checks over a SystemSnapshot of plain integers, with
+// checked arithmetic, and snapshot() which reads one from a ScenarioRun.
+
 #include "scenarios/invariant_checker.hpp"
 
 #include <variant>

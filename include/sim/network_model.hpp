@@ -18,8 +18,11 @@
 
 namespace glassbox {
 
+// Number of nodes (COORD, BANK_A, BANK_B, BANK_C); sizes per-node tables.
 inline constexpr std::size_t k_node_count = 4;
 
+// One direction of a link: base one-way delay, random extra delay of up to
+// `jitter_us`, and chance of losing a message in parts per million.
 struct LinkConfig {
     // Illustrative defaults, not measured network performance.
     SimTimeUs base_latency_us = 1;
@@ -27,12 +30,15 @@ struct LinkConfig {
     std::uint32_t drop_probability_ppm = 0;
 };
 
+// A pending one-shot fault on a directed link: affects the next message (of
+// `message_type`, if set).
 struct NextDrop {
     NodeId from;
     NodeId to;
     std::optional<MessageType> message_type;
 };
 
+// Outcome of handing a message to the network.
 enum class NetworkScheduleStatus : std::uint8_t {
     scheduled,
     dropped,
@@ -41,6 +47,8 @@ enum class NetworkScheduleStatus : std::uint8_t {
     event_queue_failure,
 };
 
+// What schedule_delivery() did with a message: delivered or dropped (and
+// why), its event, and when it was sent and arrives (or would have).
 struct NetworkScheduleResult {
     NetworkScheduleStatus status = NetworkScheduleStatus::event_queue_failure;
     bool delivered = false;
@@ -50,8 +58,19 @@ struct NetworkScheduleResult {
     SimTimeUs deliver_time_us = 0;
 };
 
+// The simulated network: a latency/jitter/drop setting for every directed
+// link, partitions, offline nodes, and one-shot drop/duplicate faults. It turns
+// a send into a delivery or drop event on the queue. Every message consumes
+// exactly one jitter draw and one drop draw from the shared RNG, so runs with
+// the same seed are identical.
+//
+// Default one-way latencies (illustrative): 1 ms within New York (COORD,
+// BANK_A), 35 ms New York - London (BANK_B), 120 ms New York - Singapore
+// (BANK_C), 85 ms London - Singapore.
 class NetworkModel {
   public:
+    // Uses `rng` (which must outlive the model) for all random draws and starts
+    // with the default links.
     explicit NetworkModel(DeterministicRng& rng)
         : rng_(rng)
     {
@@ -101,27 +120,33 @@ class NetworkModel {
         link_[node_index(from)][node_index(to)] = normalized;
     }
 
+    // Returns the current setting of the `from` -> `to` link.
     [[nodiscard]] const LinkConfig& link(NodeId from, NodeId to) const noexcept
     {
         return link_[node_index(from)][node_index(to)];
     }
 
+    // Cuts (`partitioned` true) or restores the link between `a` and `b`, both
+    // directions. Checked when a message is sent.
     void set_partition(NodeId a, NodeId b, bool partitioned) noexcept
     {
         partition_[node_index(a)][node_index(b)] = partitioned;
         partition_[node_index(b)][node_index(a)] = partitioned;
     }
 
+    // Returns true if the `a` -> `b` direction is cut.
     [[nodiscard]] bool partitioned(NodeId a, NodeId b) const noexcept
     {
         return partition_[node_index(a)][node_index(b)];
     }
 
+    // Marks `node` as unreachable (or reachable again).
     void set_node_down(NodeId node, bool down) noexcept
     {
         node_down_[node_index(node)] = down;
     }
 
+    // Returns true if `node` is marked unreachable.
     [[nodiscard]] bool node_down(NodeId node) const noexcept
     {
         return node_down_[node_index(node)];
@@ -154,9 +179,9 @@ class NetworkModel {
 
     // Called by send-side simulator code. It always consumes the configured
     // jitter and PPM drop draws before applying non-random fault precedence.
-    // node_down(to) is a send-time check in this component. Task 6's event loop
-    // must re-check the destination when a deliver_message event is popped;
-    // that arrival-time check handles nodes crashing or restarting mid-flight.
+    // node_down(to) is a send-time check here; the simulator checks the
+    // destination again on arrival (MSG_DROP_NODE_DOWN), which covers nodes
+    // crashing or restarting while a message is in flight.
     [[nodiscard]] NetworkScheduleResult schedule_delivery(
         EventQueue& queue,
         SimTimeUs send_time_us,

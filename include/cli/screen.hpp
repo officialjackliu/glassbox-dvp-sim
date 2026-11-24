@@ -17,6 +17,8 @@
 
 namespace glassbox::cli {
 
+// What to draw: the latest event shown and the simulated time on screen
+// (between that event and the next while messages animate).
 struct Moment {
     std::size_t frame = 0;   // the latest event shown
     SimTimeUs now_us = 0;    // clamped to [this event, next event]
@@ -24,11 +26,13 @@ struct Moment {
     bool paused = false;
 };
 
+// Terminal width in columns and whether to use ANSI colors.
 struct ScreenOptions {
     int width = 100; // clamped to [80, 200]
     bool color = true;
 };
 
+// Returns the screen for `moment` as lines no wider than the width.
 [[nodiscard]] std::vector<std::string> draw(const Recording& recording,
                                             const Moment& moment,
                                             const ScreenOptions& options);

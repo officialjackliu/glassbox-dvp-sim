@@ -1,3 +1,8 @@
+// Coordinator handlers: PROPOSE validation and PREPARE broadcast, vote
+// collection, the decision (logged before it is announced), retransmits until
+// every bank ACKs, OUTCOME_QUERY answers, presumed abort for unknown trades,
+// and recovery from the durable log after a crash.
+
 #include "protocol/coordinator.hpp"
 
 #include "domain/replay.hpp"

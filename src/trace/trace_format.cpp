@@ -1,3 +1,5 @@
+// Renders a TraceRecord as one line for `--scenario` output.
+
 #include "trace/trace_format.hpp"
 
 namespace glassbox {

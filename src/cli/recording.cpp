@@ -1,3 +1,6 @@
+// Records a run event by event for the player (read-only use of the core) and
+// pairs messages with their arrivals and timers with their firings.
+
 #include "cli/recording.hpp"
 
 #include <algorithm>

@@ -1,3 +1,6 @@
+// Computes the end card's numbers from a Recording in one pass over its
+// records.
+
 #include "cli/summary.hpp"
 
 #include <algorithm>

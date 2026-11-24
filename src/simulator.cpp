@@ -1,3 +1,12 @@
+// Simulator: the discrete-event loop (DESIGN.md sections 3 and 7).
+//
+// step() pops the earliest event and dispatches it: deliveries and timers go to
+// the node's handler, whose Effects batch apply_effects_impl() turns into
+// future events (log flush after log_flush_delay_us, sends released after the
+// flush, timers started at the release); crash points registered with
+// add_crash_spec() cut that batch short. Crashes bump the node's epoch so
+// stale flushes, sends and timers are ignored. Every step is traced.
+
 #include "sim/simulator.hpp"
 
 #include "sim/virtual_clock.hpp"

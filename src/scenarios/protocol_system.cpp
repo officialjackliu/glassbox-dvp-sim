@@ -1,3 +1,6 @@
+// Creates the coordinator and the three banks and installs them in a
+// Simulator.
+
 #include "scenarios/protocol_system.hpp"
 
 #include <memory>

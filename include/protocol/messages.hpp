@@ -19,6 +19,10 @@
 
 namespace glassbox {
 
+// The seven protocol messages. PROPOSE: client to coordinator. PREPARE:
+// coordinator asks a bank to lock its leg. VOTE: bank answers YES or NO.
+// COMMIT / ABORT: the decision. ACK: bank confirms it applied the decision.
+// OUTCOME_QUERY: a bank in doubt asks for the decision.
 enum class MessageType : std::uint8_t {
     propose,
     prepare,
@@ -29,6 +33,7 @@ enum class MessageType : std::uint8_t {
     outcome_query,
 };
 
+// Returns the trace spelling of `type`, e.g. "OUTCOME_QUERY".
 [[nodiscard]] constexpr std::string_view to_string(MessageType type) noexcept
 {
     switch (type) {
@@ -50,50 +55,63 @@ enum class MessageType : std::uint8_t {
     return "UNKNOWN";
 }
 
+// A bank's answer to PREPARE.
 enum class Vote : std::uint8_t {
     yes,
     no,
 };
 
+// Returns "YES" or "NO".
 [[nodiscard]] constexpr std::string_view to_string(Vote vote) noexcept
 {
     return vote == Vote::yes ? "YES" : "NO";
 }
 
+// The coordinator's decision for a trade.
 enum class Decision : std::uint8_t {
     commit,
     abort,
 };
 
+// Returns "COMMIT" or "ABORT".
 [[nodiscard]] constexpr std::string_view to_string(Decision decision) noexcept
 {
     return decision == Decision::commit ? "COMMIT" : "ABORT";
 }
 
+// Message bodies, one per MessageType.
+//
+// PROPOSE: the unvalidated trade request.
 struct ProposeBody {
     TradeRequest request;
 };
 
+// PREPARE: the validated trade and which leg the receiving bank owns.
 struct PrepareBody {
     Trade trade;
     Leg leg;
 };
 
+// VOTE: YES, or NO with the reason the bank refused.
 struct VoteBody {
     Vote vote;
     ReasonCode reason;
 };
 
+// COMMIT carries no data.
 struct CommitBody {};
 
+// ABORT: why the coordinator aborted (passed on to the bank).
 struct AbortBody {
     ReasonCode reason;
 };
 
+// ACK: which decision the bank applied.
 struct AckBody {
     Decision decision;
 };
 
+// OUTCOME_QUERY carries no data.
 struct OutcomeQueryBody {};
 
 // std::monostate means "no body" and is only valid for legacy/test messages
@@ -108,6 +126,8 @@ using MessageBody = std::variant<
     AckBody,
     OutcomeQueryBody>;
 
+// One message on the wire. `trade_id` is set for every type except PROPOSE
+// (the coordinator assigns the id on receipt).
 struct Message {
     std::uint64_t msg_id = 0;
     NodeId from = NodeId::coordinator;
@@ -117,6 +137,7 @@ struct Message {
     MessageBody body{};
 };
 
+// Result of check_message(): ok, or the first problem found.
 enum class MessageCheck : std::uint8_t {
     ok,
     missing_body,
@@ -129,6 +150,7 @@ enum class MessageCheck : std::uint8_t {
     invalid_abort_reason,
 };
 
+// Returns the trace spelling of `check`, e.g. "INVALID_ROUTE".
 [[nodiscard]] constexpr std::string_view to_string(MessageCheck check) noexcept
 {
     switch (check) {
@@ -173,6 +195,10 @@ enum class MessageCheck : std::uint8_t {
 // The party that owns a leg of a trade.
 [[nodiscard]] NodeId leg_party(const Trade& trade, Leg leg) noexcept;
 
+// Builders for each message type. They fill routing, type, trade id and body
+// consistently, so check_message() accepts the result; msg_id stays 0 until
+// the simulator releases the send. make_decision() builds COMMIT or ABORT
+// from a Decision.
 [[nodiscard]] Message make_propose(TradeRequest request);
 [[nodiscard]] Message make_prepare(const Trade& trade, Leg leg);
 [[nodiscard]] Message make_vote(NodeId from,

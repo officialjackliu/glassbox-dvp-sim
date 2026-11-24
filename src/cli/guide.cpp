@@ -1,3 +1,6 @@
+// Intro card text for every scenario. The numbers quoted here are checked
+// against the scenario constants by cli_guide_test.
+
 #include "cli/guide.hpp"
 
 namespace glassbox::cli {

@@ -24,6 +24,7 @@
 
 namespace glassbox::cli {
 
+// How one trade ended.
 struct TradeOutcome {
     TradeId trade_id{0};
     NodeId buyer = NodeId::bank_a;
@@ -37,6 +38,7 @@ struct TradeOutcome {
     friend bool operator==(const TradeOutcome&, const TradeOutcome&) = default;
 };
 
+// The numbers on the end card; see the file comment for each.
 struct RunSummary {
     std::vector<TradeOutcome> trades;     // in trade id order
     std::array<SimTimeUs, 3> lock_hold_us{}; // BANK_A, BANK_B, BANK_C
@@ -50,6 +52,7 @@ struct RunSummary {
     friend bool operator==(const RunSummary&, const RunSummary&) = default;
 };
 
+// Measures `recording`.
 [[nodiscard]] RunSummary summarize(const Recording& recording);
 
 } // namespace glassbox::cli

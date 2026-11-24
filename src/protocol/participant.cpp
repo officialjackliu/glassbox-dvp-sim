@@ -1,3 +1,7 @@
+// Participant handlers: PREPARE checks and locking (YES only after PREPARED
+// is durable), COMMIT settlement, ABORT release or tombstone, asking for the
+// outcome while in doubt, and restoring locks of in-doubt trades on restart.
+
 #include "protocol/participant.hpp"
 
 #include "domain/replay.hpp"

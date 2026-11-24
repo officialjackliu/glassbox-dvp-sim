@@ -1,3 +1,7 @@
+// Text layout of the player screen, the intro card and the end card. Lines
+// are laid out as plain text and colored last, so widths are exact; every
+// character used is one column wide.
+
 #include "cli/screen.hpp"
 
 #include "cli/narrator.hpp"

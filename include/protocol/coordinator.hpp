@@ -19,11 +19,15 @@
 
 namespace glassbox {
 
+// How long the coordinator waits for votes before aborting, and how its
+// decision resends back off.
 struct CoordinatorConfig {
     SimTimeUs vote_timeout_us = 500'000;
     BackoffPolicy retransmit{};
 };
 
+// The coordinator's view of one trade: the votes in, the decision (and
+// whether its record is durable yet), and which banks have acknowledged.
 struct CoordinatorTrade {
     Trade trade;
     TradeState state = TradeState::collecting;
@@ -40,12 +44,18 @@ struct CoordinatorTrade {
         const CoordinatorTrade&) noexcept = default;
 };
 
+// Runs two-phase commit for every trade: validates and logs a PROPOSE, sends
+// PREPARE to both banks, collects votes (aborting on a NO or on the vote
+// timeout), logs and announces the decision, resends it until both banks
+// ACK, then logs END. Answers OUTCOME_QUERY from the log; with no record of a
+// trade it answers ABORT (presumed abort).
 class Coordinator final : public Node {
   public:
     // Throws std::invalid_argument for a non-positive vote timeout or an
     // invalid retransmit backoff.
     explicit Coordinator(CoordinatorConfig config);
 
+    // Node interface; see sim/node.hpp.
     [[nodiscard]] Effects on_message(const Message& message,
                                      SimTimeUs now) override;
     [[nodiscard]] Effects on_timer(const TimerEvent& event,

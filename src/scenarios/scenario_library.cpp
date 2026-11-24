@@ -1,3 +1,6 @@
+// The setups for scenarios S1-S14: starting ledgers, scripted trades and
+// faults, and crash points.
+
 #include "scenarios/scenario_library.hpp"
 
 #include <tuple>

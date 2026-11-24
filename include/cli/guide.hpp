@@ -8,6 +8,7 @@
 
 namespace glassbox::cli {
 
+// The text of one intro card.
 struct ScenarioGuide {
     std::string_view id;
     std::string_view title;
@@ -15,7 +16,7 @@ struct ScenarioGuide {
     std::string_view watch_for;
 };
 
-// nullptr for an unknown id.
+// Returns the guide for scenario `id` ("S1" ... "S14"), or nullptr.
 [[nodiscard]] const ScenarioGuide* find_guide(std::string_view id) noexcept;
 
 // make tour: a success, a refusal, a crashed bank, a crashed coordinator,

@@ -1,3 +1,8 @@
+// Turns each recorded event into a Story: one function per kind of event
+// (submission, PREPARE, vote, decision, settlement, drop, crash, restart,
+// ...), using the trace records of that event and the node views before and
+// after it. Also the integer-only money, time and count formatting.
+
 #include "cli/narrator.hpp"
 
 #include <algorithm>

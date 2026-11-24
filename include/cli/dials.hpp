@@ -21,6 +21,7 @@
 
 namespace glassbox::cli {
 
+// Result of apply_dial().
 enum class DialStatus : std::uint8_t {
     ok,
     unknown_key, // also: a key this scenario has nothing to apply to
@@ -28,9 +29,10 @@ enum class DialStatus : std::uint8_t {
     out_of_range,
 };
 
+// Returns a short message for `status`, for the command line.
 [[nodiscard]] std::string_view to_string(DialStatus status) noexcept;
 
-// Applies one "key=value". On failure the setup is unchanged.
+// Applies one "key=value" to `setup`. On failure `setup` is unchanged.
 [[nodiscard]] DialStatus apply_dial(ScenarioSetup& setup,
                                     std::string_view assignment);
 

@@ -1,5 +1,14 @@
 #pragma once
 
+// Crash recovery: rebuild a node's state from its durable log alone.
+//
+// replay_participant() starts from the bank's genesis ledger and applies the
+// records in LSN order through LedgerOp, so the ledger, the final trade states
+// and the trades still in doubt (PREPARED with no outcome) come back exactly.
+// replay_coordinator() recovers each trade's decision and the highest trade id.
+// Both are pure and report inconsistent logs as ReplayErrors instead of
+// throwing.
+
 #include "domain/durable_log.hpp"
 #include "domain/local_ledger.hpp"
 
@@ -12,6 +21,7 @@
 
 namespace glassbox {
 
+// A log that cannot have been written by a correct node.
 enum class ReplayErrorKind : std::uint8_t {
     committed_without_prepared,
     prepared_twice,
@@ -25,6 +35,7 @@ enum class ReplayErrorKind : std::uint8_t {
     end_before_decision,
 };
 
+// Returns the trace spelling of `kind`, e.g. "PREPARED_TWICE".
 [[nodiscard]] constexpr std::string_view to_string(
     ReplayErrorKind kind) noexcept
 {
@@ -53,6 +64,7 @@ enum class ReplayErrorKind : std::uint8_t {
     return "UNKNOWN";
 }
 
+// One problem found during replay, with the trade it concerns if any.
 struct ReplayError {
     ReplayErrorKind kind;
     std::optional<TradeId> trade_id;
@@ -62,6 +74,9 @@ struct ReplayError {
         const ReplayError&) noexcept = default;
 };
 
+// What a bank knows after replay: its ledger (locks of in-doubt trades
+// included), each trade's final state, the trades still in doubt, and any
+// errors.
 struct ParticipantReplay {
     LocalLedger ledger;
     std::map<TradeId, TradeState> states;
@@ -73,6 +88,7 @@ struct ParticipantReplay {
         const ParticipantReplay&) noexcept = default;
 };
 
+// What the coordinator's log says about one trade.
 struct CoordinatorTradeReplay {
     Trade trade;
     bool committed = false;
@@ -84,6 +100,8 @@ struct CoordinatorTradeReplay {
         const CoordinatorTradeReplay&) noexcept = default;
 };
 
+// What the coordinator knows after replay: every logged trade, the highest
+// trade id seen (so new ids continue after it), and any errors.
 struct CoordinatorReplay {
     std::map<TradeId, CoordinatorTradeReplay> trades;
     std::optional<TradeId> max_trade_id;
@@ -94,11 +112,13 @@ struct CoordinatorReplay {
         const CoordinatorReplay&) noexcept = default;
 };
 
+// Replays bank `self`'s log `entries` on top of `genesis`.
 [[nodiscard]] ParticipantReplay replay_participant(
     const LocalLedger& genesis,
     NodeId self,
     std::span<const LogEntry> entries);
 
+// Replays the coordinator's log `entries`.
 [[nodiscard]] CoordinatorReplay replay_coordinator(
     std::span<const LogEntry> entries);
 

@@ -1,3 +1,5 @@
+// Parses and applies --set settings to a ScenarioSetup.
+
 #include "cli/dials.hpp"
 
 #include "sim/deterministic_rng.hpp"

@@ -16,6 +16,7 @@
 
 namespace glassbox::cli {
 
+// A player command read from the keyboard.
 enum class Key : std::uint8_t {
     none,
     pause,   // space, p

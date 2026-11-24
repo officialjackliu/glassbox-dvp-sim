@@ -26,20 +26,23 @@ inline constexpr std::int64_t k_max_quiet_ms = 1'500;  // nothing on the wire
 inline constexpr std::int64_t k_dwell_ms = 1'800;
 inline constexpr std::int64_t k_minor_dwell_ms = 600;
 
+// How to show one gap between events and the event after it.
 struct Pace {
     std::int64_t travel_ms = 0; // animate the gap before the event
     std::int64_t dwell_ms = 0;  // hold after the event
     SimTimeUs skipped_us = 0;   // sim time compressed beyond the cap
 };
 
-// speed_percent is clamped to [25, 800]; a negative gap counts as 0.
+// Returns how long to animate a gap of `gap_us` before an event and how long
+// to hold the event. speed_percent is clamped to [25, 800]; a negative gap
+// counts as 0.
 [[nodiscard]] Pace pace(SimTimeUs gap_us,
                         bool messages_in_flight,
                         bool minor_event,
                         int speed_percent) noexcept;
 
-// The next step up/down k_speed_percent (unchanged at the ends). A value
-// between steps moves to the nearest step in that direction.
+// Returns the next speed up/down k_speed_percent (unchanged at the ends). A
+// value between steps moves to the nearest step in that direction.
 [[nodiscard]] int faster(int speed_percent) noexcept;
 [[nodiscard]] int slower(int speed_percent) noexcept;
 

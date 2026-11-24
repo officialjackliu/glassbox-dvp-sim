@@ -1,3 +1,5 @@
+// Slow-motion timing for the player; integer arithmetic only.
+
 #include "cli/pacing.hpp"
 
 #include <algorithm>

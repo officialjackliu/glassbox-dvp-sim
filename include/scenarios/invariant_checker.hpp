@@ -31,6 +31,7 @@
 
 namespace glassbox {
 
+// Which global invariant a violation breaks.
 enum class InvariantKind : std::uint8_t {
     negative_balance,
     locked_exceeds_total,
@@ -42,6 +43,7 @@ enum class InvariantKind : std::uint8_t {
     arithmetic_overflow,
 };
 
+// Returns the trace spelling of `kind`, e.g. "ATOMICITY".
 [[nodiscard]] constexpr std::string_view to_string(InvariantKind kind) noexcept
 {
     switch (kind) {
@@ -65,11 +67,13 @@ enum class InvariantKind : std::uint8_t {
     return "UNKNOWN";
 }
 
+// Which invariants to check; see the file comment.
 enum class CheckMode : std::uint8_t {
     anytime,
     quiescent,
 };
 
+// One bank's balances as plain integers (cents and bond units).
 struct BalanceView {
     std::int64_t cash_total = 0;
     std::int64_t cash_locked = 0;
@@ -80,6 +84,7 @@ struct BalanceView {
                                          const BalanceView&) = default;
 };
 
+// The parts of a trade the checks need: parties, quantity and price.
 struct TradeTerms {
     TradeId trade_id;
     NodeId buyer;
@@ -103,6 +108,8 @@ struct SystemSnapshot {
                                          const SystemSnapshot&) = default;
 };
 
+// One broken invariant, with the bank and trade it concerns when known and a
+// human-readable detail.
 struct InvariantViolation {
     InvariantKind kind;
     std::optional<NodeId> node;
@@ -113,6 +120,7 @@ struct InvariantViolation {
                                          const InvariantViolation&) = default;
 };
 
+// Returns `ledger`'s balances as a BalanceView.
 [[nodiscard]] BalanceView balance_view(const LocalLedger& ledger) noexcept;
 
 // Reads: genesis and current ledgers, participants' trade states, trade

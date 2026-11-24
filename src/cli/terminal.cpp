@@ -1,3 +1,6 @@
+// POSIX terminal handling: raw keys via termios and poll(), the alternate
+// screen, and restoring the terminal on exit.
+
 #include "cli/terminal.hpp"
 
 #include <poll.h>

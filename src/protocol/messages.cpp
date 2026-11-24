@@ -1,3 +1,6 @@
+// Message builders, the well-formedness check run on every received message,
+// and the short body descriptions shown in the trace.
+
 #include "protocol/messages.hpp"
 
 #include <type_traits>

@@ -43,6 +43,7 @@ struct NodeView {
 inline constexpr std::array<NodeId, 4> k_view_order{
     NodeId::coordinator, NodeId::bank_a, NodeId::bank_b, NodeId::bank_c};
 
+// Returns `node`'s index in Frame::nodes (k_view_order).
 [[nodiscard]] std::size_t view_index(NodeId node) noexcept;
 
 struct Frame {
@@ -80,6 +81,7 @@ struct TimerSpan {
     std::optional<SimTimeUs> fires_at_us; // unset if it never fired
 };
 
+// A whole run, event by event.
 struct Recording {
     std::vector<Frame> frames; // frames[0] = before the first event
     std::vector<Flight> flights;   // in send order
@@ -87,6 +89,8 @@ struct Recording {
     bool quiesced = false;
 };
 
+// Runs `setup` to the end (or for at most `max_events` events) and records
+// it. `quiesced` says whether the run finished.
 [[nodiscard]] Recording record(const ScenarioSetup& setup,
                                std::size_t max_events = 100'000);
 

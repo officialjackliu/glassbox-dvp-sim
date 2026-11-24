@@ -258,8 +258,10 @@ add_test(NAME cli_unknown_scenario COMMAND glassbox-dvp-sim --scenario S99)
 set_tests_properties(cli_unknown_scenario PROPERTIES WILL_FAIL TRUE)
 add_test(NAME cli_bad_seed COMMAND glassbox-dvp-sim --scenario S1 --seed x1)
 set_tests_properties(cli_bad_seed PROPERTIES WILL_FAIL TRUE)
+# No options and no terminal (as under ctest): print the manual, exit 0.
+# (In a terminal the same command opens the how-to-play menu.)
 add_test(NAME cli_no_args COMMAND glassbox-dvp-sim)
-set_tests_properties(cli_no_args PROPERTIES WILL_FAIL TRUE)
+set_tests_properties(cli_no_args PROPERTIES PASS_REGULAR_EXPRESSION "START HERE")
 
 add_executable(scenario_vote_no_test tests/scenario_vote_no_test.cpp)
 target_link_libraries(scenario_vote_no_test PRIVATE glassbox_core)

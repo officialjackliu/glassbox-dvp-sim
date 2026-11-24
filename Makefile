@@ -1,6 +1,8 @@
-# glassbox-dvp-sim: short commands for building, testing and running.
+# glassbox-dvp-sim: short commands for building, playing and testing.
 #
-#   make                     build the simulator (Debug)
+#   make                     build, then open the how-to-play menu
+#   make manual              print every command and flag (also: docs/MANUAL.md)
+#   make build               only build the simulator (Debug)
 #   make list                list the scenarios
 #   make tour                guided demo: S1, S2, S6, S9, S14 in slow motion
 #   make watch S=S9          watch one scenario (SPEED=slow|normal|fast)
@@ -42,12 +44,20 @@ SPEED ?= normal
 SET ?=
 SETS = $(foreach s,$(SET),--set $(s))
 
-.PHONY: all build list run watch story tour test test-all test-asan clean help
+.PHONY: all menu manual build list run watch story tour test test-all \
+        test-asan clean help
 
-all: build
+# The default: build, then the menu (without a terminal it prints the manual).
+all: menu
+
+menu: build
+	@$(BIN) --speed $(SPEED) --seed $(SEED) $(SETS)
+
+manual: build
+	@$(BIN) --help
 
 help:
-	@sed -n '2,18p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '2,20p' Makefile | sed 's/^# \{0,1\}//'
 
 $(BUILD)/debug/CMakeCache.txt:
 	cmake -S . -B $(BUILD)/debug -DCMAKE_BUILD_TYPE=Debug $(CMAKE_COMMON)
@@ -82,7 +92,7 @@ watch: build
 	@$(BIN) --scenario $(S) --seed $(SEED) --watch --speed $(SPEED) $(SETS)
 
 tour: build
-	@$(BIN) --tour --speed $(SPEED)
+	@$(BIN) --tour --speed $(SPEED) --seed $(SEED)
 
 story: build
 	@if [ -z "$(S)" ]; then echo "usage: make story S=S1 [SEED=1]"; exit 2; fi

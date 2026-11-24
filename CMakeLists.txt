@@ -320,3 +320,8 @@ add_test(NAME cli_dials_test COMMAND cli_dials_test)
 add_executable(cli_summary_test tests/cli_summary_test.cpp)
 target_link_libraries(cli_summary_test PRIVATE glassbox_cli)
 add_test(NAME cli_summary_test COMMAND cli_summary_test)
+
+# Runs the real front end with piped input.
+add_executable(cli_menu_test tests/cli_menu_test.cpp)
+add_test(NAME cli_menu_test
+         COMMAND cli_menu_test $<TARGET_FILE:glassbox-dvp-sim>)
